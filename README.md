@@ -1,5 +1,7 @@
 # GraphHarness
 
+[![Quality Gate](https://github.com/assdalee/graph-harness/actions/workflows/quality.yml/badge.svg)](https://github.com/assdalee/graph-harness/actions/workflows/quality.yml)
+
 Production-oriented AI agent harness for Microsoft Graph, built with FastAPI and LiteLLM.
 
 GraphHarness is not a flashy multi-agent demo. It is a small, explicit service for studying and
@@ -218,6 +220,10 @@ uv run python scripts/check.py
 
 The quality gate runs compile checks, tests, frontend install/build, mock evals, app factory import,
 and live smoke. The live smoke automatically skips when Graph credentials are absent.
+
+The same gate runs in GitHub Actions on pushes to `main`, pull requests, and manual dispatch.
+CI runs with `GRAPH_BACKEND=mock` and `LLM_BACKEND=fake`, then validates both Docker Compose
+configurations.
 
 ## Live Microsoft Graph Smoke
 
