@@ -1,0 +1,13 @@
+[
+  {
+    "match": "scenario service principals",
+    "tool": "list_service_principals",
+    "args": {"top": 10}
+  },
+  {
+    "match": "scenario oauth grants",
+    "tool": "list_oauth_permission_grants",
+    "args": {"top": 10}
+  }
+]
+

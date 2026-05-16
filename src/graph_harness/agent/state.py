@@ -1,0 +1,18 @@
+from typing import Any
+
+from pydantic import BaseModel, Field
+
+from graph_harness.api_models.chat import AgentTraceEvent, ToolCallRecord
+
+
+class AgentRunState(BaseModel):
+    messages: list[dict[str, Any]]
+    turn: int = 0
+    tool_calls: list[ToolCallRecord] = Field(default_factory=list)
+    data: list[Any] = Field(default_factory=list)
+    stop_reason: str = "not_started"
+    status: str = "running"
+    warnings: list[str] = Field(default_factory=list)
+    trace_events: list[AgentTraceEvent] = Field(default_factory=list)
+    empty_response_count: int = 0
+    recovery_attempts: dict[str, int] = Field(default_factory=dict)

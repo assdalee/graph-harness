@@ -1,0 +1,161 @@
+[
+  {
+    "id": "list_users",
+    "message": "List users",
+    "expect_status": "completed",
+    "expect_tool_names": ["list_users"],
+    "expect_stop_reason": "final_answer",
+    "expect_answer_contains": ["Returned", "Ada Lovelace"]
+  },
+  {
+    "id": "resolve_sarah",
+    "message": "Resolve Sarah",
+    "expect_status": "completed",
+    "expect_tool_names": ["resolve_user"],
+    "expect_stop_reason": "final_answer",
+    "expect_answer_contains": ["Sarah Chen", "user-sarah"]
+  },
+  {
+    "id": "high_severity_alerts",
+    "message": "List high severity alerts",
+    "expect_status": "completed",
+    "expect_tool_names": ["list_security_alerts"],
+    "expect_stop_reason": "final_answer",
+    "expect_answer_contains": ["alert-1"]
+  },
+  {
+    "id": "failed_signins",
+    "message": "Show failed sign-ins",
+    "expect_status": "completed",
+    "expect_tool_names": ["list_sign_in_logs"],
+    "expect_stop_reason": "final_answer",
+    "expect_answer_contains": ["signin-1"]
+  },
+  {
+    "id": "ambiguous_identity",
+    "message": "Resolve Alex",
+    "expect_status": "needs_clarification",
+    "expect_tool_names": ["resolve_user"],
+    "expect_stop_reason": "clarification_ambiguous_identity",
+    "expect_trace_events": ["clarification_required", "run_completed"],
+    "expect_answer_contains": ["multiple matching identities", "alex.kim@example.com"]
+  },
+  {
+    "id": "invalid_filter_recovery",
+    "message": "List alerts with bad filter",
+    "expect_status": "completed",
+    "expect_tool_names": ["list_security_alerts", "list_security_alerts"],
+    "expect_error_codes": ["invalid_filter"],
+    "expect_tool_ok": [false, true],
+    "expect_stop_reason": "final_answer",
+    "expect_warning_contains": ["Attempting recovery"],
+    "expect_answer_contains": ["alert-1"]
+  },
+  {
+    "id": "permission_denied_security_incidents",
+    "message": "List incidents with permission issue",
+    "expect_status": "completed",
+    "expect_tool_names": ["graph_operation"],
+    "expect_error_codes": ["permission_denied"],
+    "expect_tool_ok": [false],
+    "expect_stop_reason": "tool_error_permission_denied",
+    "expect_answer_contains": ["permission_denied"]
+  },
+  {
+    "id": "confirmation_required_revoke_sessions",
+    "message": "Revoke sessions for Sarah",
+    "expect_status": "needs_clarification",
+    "expect_tool_names": ["revoke_user_sessions"],
+    "expect_error_codes": ["confirmation_required"],
+    "expect_tool_ok": [false],
+    "expect_stop_reason": "clarification_confirmation_required",
+    "expect_trace_events": ["clarification_required", "run_completed"],
+    "expect_answer_contains": ["explicit confirmation", "target", "reason"]
+  },
+  {
+    "id": "confirmed_revoke_sessions",
+    "message": "Revoke sessions for Sarah confirmed",
+    "expect_status": "completed",
+    "expect_tool_names": ["revoke_user_sessions"],
+    "expect_tool_ok": [true],
+    "expect_stop_reason": "final_answer",
+    "expect_answer_contains": ["Mock POST", "revokeSignInSessions completed"]
+  },
+  {
+    "id": "confirmed_add_user_to_group",
+    "message": "Add Ada to Finance group confirmed",
+    "expect_status": "completed",
+    "expect_tool_names": ["add_group_member"],
+    "expect_tool_ok": [true],
+    "expect_stop_reason": "final_answer",
+    "expect_answer_contains": ["Mock POST", "members/$ref completed"]
+  },
+  {
+    "id": "not_found_recovery",
+    "message": "Find missing Sarah",
+    "expect_status": "completed",
+    "expect_tool_names": ["get_user", "resolve_user"],
+    "expect_error_codes": ["not_found"],
+    "expect_tool_ok": [false, true],
+    "expect_stop_reason": "final_answer",
+    "expect_warning_contains": ["Attempting recovery"],
+    "expect_answer_contains": ["user-sarah"]
+  },
+  {
+    "id": "rate_limit_recovery",
+    "message": "List users with rate limit",
+    "expect_status": "completed",
+    "expect_tool_names": ["list_users", "list_users"],
+    "expect_error_codes": ["rate_limited"],
+    "expect_tool_ok": [false, true],
+    "expect_stop_reason": "final_answer",
+    "expect_warning_contains": ["Attempting recovery"],
+    "expect_answer_contains": ["user-ada"]
+  },
+  {
+    "id": "list_service_principals",
+    "message": "List service principals",
+    "expect_status": "completed",
+    "expect_tool_names": ["list_service_principals"],
+    "expect_tool_ok": [true],
+    "expect_stop_reason": "final_answer",
+    "expect_answer_contains": ["sp-risky", "Risky App"]
+  },
+  {
+    "id": "list_oauth_grants",
+    "message": "List OAuth grants",
+    "expect_status": "completed",
+    "expect_tool_names": ["list_oauth_permission_grants"],
+    "expect_tool_ok": [true],
+    "expect_stop_reason": "final_answer",
+    "expect_answer_contains": ["grant-risky"]
+  },
+  {
+    "id": "delete_oauth_grant_requires_confirmation",
+    "message": "Delete OAuth grant",
+    "expect_status": "needs_clarification",
+    "expect_tool_names": ["delete_oauth_permission_grant"],
+    "expect_error_codes": ["confirmation_required"],
+    "expect_tool_ok": [false],
+    "expect_stop_reason": "clarification_confirmation_required",
+    "expect_answer_contains": ["explicit confirmation"]
+  },
+  {
+    "id": "delete_oauth_grant_confirmed",
+    "message": "Delete OAuth grant confirmed",
+    "expect_status": "completed",
+    "expect_tool_names": ["delete_oauth_permission_grant"],
+    "expect_tool_ok": [true],
+    "expect_stop_reason": "final_answer",
+    "expect_answer_contains": ["Mock DELETE", "grant-risky"]
+  },
+  {
+    "id": "declarative_fake_llm_scenario",
+    "message": "Scenario OAuth grants",
+    "expect_status": "completed",
+    "expect_tool_names": ["list_oauth_permission_grants"],
+    "expect_tool_ok": [true],
+    "expect_stop_reason": "final_answer",
+    "expect_answer_contains": ["grant-risky"]
+  }
+]
