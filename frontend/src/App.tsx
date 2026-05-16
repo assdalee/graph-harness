@@ -2,13 +2,18 @@ import {
   Activity,
   AlertTriangle,
   CheckCircle2,
-  Clock,
   KeyRound,
+  Loader2,
   RefreshCw,
   Search,
   Send,
   Server,
   ShieldCheck,
+  Sparkles,
+  Users,
+  Bell,
+  KeySquare,
+  UserSearch,
   Wrench,
   XCircle,
 } from "lucide-react";
@@ -23,11 +28,11 @@ import {
   sendChat,
 } from "./api";
 
-const EXAMPLES = [
-  "List users",
-  "Find Sarah Chen",
-  "List high severity alerts",
-  "Show OAuth grants",
+const EXAMPLES: Array<{ label: string; icon: typeof Users }> = [
+  { label: "List users", icon: Users },
+  { label: "Find Sarah Chen", icon: UserSearch },
+  { label: "List high severity alerts", icon: Bell },
+  { label: "Show OAuth grants", icon: KeySquare },
 ];
 
 export function App() {
@@ -37,7 +42,7 @@ export function App() {
   const [operations, setOperations] = useState<OperationSummary[]>([]);
   const [operationFilter, setOperationFilter] = useState("");
   const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [input, setInput] = useState(EXAMPLES[0]);
+  const [input, setInput] = useState(EXAMPLES[0].label);
   const [threadId, setThreadId] = useState<string | null>(null);
   const [selectedResponse, setSelectedResponse] = useState<ChatResponse | null>(null);
   const [isSending, setIsSending] = useState(false);
@@ -171,7 +176,9 @@ export function App() {
               title={operation.description}
             >
               <span>{operation.name}</span>
-              <small>{operation.read_only ? "read" : "write"}</small>
+              <small className={`tag ${operation.read_only ? "tag-read" : "tag-write"}`}>
+                {operation.read_only ? "read" : "write"}
+              </small>
             </button>
           ))}
         </div>
@@ -184,6 +191,7 @@ export function App() {
             <p>{threadId ? `thread ${threadId}` : "new thread"}</p>
           </div>
           <button className="secondary-button" onClick={resetThread}>
+            <RefreshCw size={14} aria-hidden="true" />
             New thread
           </button>
         </header>
@@ -198,11 +206,25 @@ export function App() {
         <section className="chat-panel" aria-label="Conversation">
           {messages.length === 0 ? (
             <div className="empty-state">
-              {EXAMPLES.map((example) => (
-                <button key={example} onClick={() => setInput(example)}>
-                  {example}
-                </button>
-              ))}
+              <div className="empty-state-card">
+                <span className="empty-state-eyebrow">
+                  <Sparkles size={12} aria-hidden="true" />
+                  Get started
+                </span>
+                <h3>Talk to the graph</h3>
+                <p>
+                  Ask the agent to query Microsoft Graph through typed tool contracts. Every run is
+                  traced — tool calls, status, and trace events appear in the inspector on the right.
+                </p>
+                <div className="empty-state-grid">
+                  {EXAMPLES.map(({ label, icon: Icon }) => (
+                    <button key={label} onClick={() => setInput(label)}>
+                      <Icon size={16} aria-hidden="true" />
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
             </div>
           ) : (
             <div className="messages">
@@ -212,8 +234,13 @@ export function App() {
                   className={`message message-${message.role}`}
                   onClick={() => message.response && setSelectedResponse(message.response)}
                 >
-                  <span>{message.role}</span>
-                  <p>{message.content}</p>
+                  <span className="message-avatar" aria-hidden="true">
+                    {message.role === "user" ? "You" : <ShieldCheck size={16} />}
+                  </span>
+                  <span className="message-body">
+                    <span className="message-role">{message.role}</span>
+                    <p className="message-content">{message.content}</p>
+                  </span>
                 </button>
               ))}
             </div>
@@ -224,7 +251,13 @@ export function App() {
           <textarea
             value={input}
             onChange={(event) => setInput(event.target.value)}
-            placeholder="Ask GraphHarness"
+            onKeyDown={(event) => {
+              if (event.key === "Enter" && !event.shiftKey) {
+                event.preventDefault();
+                event.currentTarget.form?.requestSubmit();
+              }
+            }}
+            placeholder="Ask GraphHarness…"
             rows={2}
           />
           <button
@@ -234,8 +267,15 @@ export function App() {
             aria-label={isSending ? "Running request" : "Send message"}
             title={isSending ? "Running" : "Send"}
           >
-            {isSending ? <Clock size={18} aria-hidden="true" /> : <Send size={18} aria-hidden="true" />}
+            {isSending ? (
+              <Loader2 className="sending" size={18} aria-hidden="true" />
+            ) : (
+              <Send size={18} aria-hidden="true" />
+            )}
           </button>
+          <span className="composer-hint">
+            Press <kbd>Enter</kbd> to send · <kbd>Shift</kbd>+<kbd>Enter</kbd> for newline
+          </span>
         </form>
       </main>
 
