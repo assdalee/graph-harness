@@ -1,0 +1,7 @@
+services:
+  backend:
+    env_file:
+      - .env
+    environment:
+      GRAPH_BACKEND: ${GRAPH_BACKEND:-live}
+      LLM_BACKEND: ${LLM_BACKEND:-litellm}

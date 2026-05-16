@@ -128,6 +128,34 @@ cd frontend
 npm run build
 ```
 
+## Docker
+
+Run the full stack with Docker Compose:
+
+```bash
+GRAPH_BACKEND=mock LLM_BACKEND=fake docker compose up --build
+```
+
+Open `http://localhost:5173`. The frontend container serves the React build with Nginx and
+proxies `/api` to the backend container.
+
+Useful container endpoints:
+
+```bash
+curl -s http://localhost:8091/health
+curl -s http://localhost:5173/healthz
+```
+
+To use live Microsoft Graph and a real LiteLLM provider, set the same environment variables
+you use locally in `.env`, then run with the live override:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.live.yml up --build
+```
+
+By default, Compose falls back to `GRAPH_BACKEND=mock` and `LLM_BACKEND=fake` when those
+variables are not set, so the stack can run without Microsoft Graph or LLM credentials.
+
 ## Configuration
 
 Important `.env` values:
