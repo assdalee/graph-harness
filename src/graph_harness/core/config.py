@@ -42,6 +42,10 @@ class Settings(BaseModel):
     agent_parallel_reads: bool = True
     agent_require_mutation_confirmation: bool = True
 
+    runs_enabled: bool = False
+    runs_backend: str = "sqlite"
+    runs_db_path: str = "./data/runs.sqlite3"
+
     @field_validator("graph_scopes", mode="before")
     @classmethod
     def split_graph_scopes(cls, value: str | list[str]) -> list[str]:
@@ -128,6 +132,9 @@ class Settings(BaseModel):
                 "AGENT_REQUIRE_MUTATION_CONFIRMATION",
                 True,
             ),
+            runs_enabled=_get_bool("RUNS_ENABLED", False),
+            runs_backend=_get_str("RUNS_BACKEND", "sqlite"),
+            runs_db_path=_get_str("RUNS_DB_PATH", "./data/runs.sqlite3"),
         )
 
 
