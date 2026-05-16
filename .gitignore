@@ -12,6 +12,13 @@ htmlcov/
 dist/
 build/
 
+# Frontend
+frontend/node_modules/
+frontend/dist/
+frontend/*.tsbuildinfo
+frontend/vite.config.d.ts
+frontend/vite.config.js
+
 # Virtual environments
 .venv/
 venv/
@@ -26,4 +33,3 @@ env/
 .DS_Store
 .idea/
 .vscode/
-

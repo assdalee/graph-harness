@@ -29,6 +29,8 @@ def main() -> int:
     steps = [
         ("compile", [python, "-m", "compileall", "src", "tests", "scripts"]),
         ("unit tests", [python, "-m", "pytest", "-q"]),
+        ("frontend dependencies", ["npm", "ci", "--prefix", "frontend"]),
+        ("frontend build", ["npm", "run", "build", "--prefix", "frontend"]),
         ("mock evals", [python, "scripts/run_mock_evals.py"]),
         (
             "app factory import",

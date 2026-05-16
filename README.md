@@ -100,6 +100,34 @@ curl -s http://localhost:8091/v1/graph/chat \
 - `POST /v1/graph/chat`
 - `POST /v1/graph/chat/stream`
 
+## Frontend Console
+
+GraphHarness includes a lightweight React console in `frontend/`.
+
+Run the backend in one terminal:
+
+```bash
+GRAPH_BACKEND=mock LLM_BACKEND=fake \
+uv run uvicorn graph_harness.app.main:create_app --factory --host 0.0.0.0 --port 8091 --reload
+```
+
+Run the frontend in another terminal:
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+Open `http://localhost:5173`. The dev server proxies `/api` to `http://localhost:8091`.
+
+Build the frontend:
+
+```bash
+cd frontend
+npm run build
+```
+
 ## Configuration
 
 Important `.env` values:
@@ -160,8 +188,8 @@ Run the full local quality gate:
 uv run python scripts/check.py
 ```
 
-The quality gate runs compile checks, tests, mock evals, app factory import, and live smoke. The live
-smoke automatically skips when Graph credentials are absent.
+The quality gate runs compile checks, tests, frontend install/build, mock evals, app factory import,
+and live smoke. The live smoke automatically skips when Graph credentials are absent.
 
 ## Live Microsoft Graph Smoke
 
