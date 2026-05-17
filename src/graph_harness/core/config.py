@@ -15,6 +15,7 @@ class Settings(BaseModel):
     llm_backend: str = "litellm"
     llm_fake_scenarios_path: str | None = None
     llm_api_key_provider: str | None = None
+    openrouter_api_key: str | None = None
     litellm_api_base: str | None = None
     litellm_temperature: float = 0
     litellm_max_tokens: int = 2048
@@ -105,6 +106,7 @@ class Settings(BaseModel):
             llm_backend=_get_str("LLM_BACKEND", cls.model_fields["llm_backend"].default),
             llm_fake_scenarios_path=_get_optional_str("LLM_FAKE_SCENARIOS_PATH"),
             llm_api_key_provider=_get_optional_str("LLM_API_KEY_PROVIDER"),
+            openrouter_api_key=_get_optional_str("OPENROUTER_API_KEY"),
             litellm_api_base=_get_optional_str("LITELLM_API_BASE"),
             litellm_temperature=_get_float("LITELLM_TEMPERATURE", 0),
             litellm_max_tokens=_get_int("LITELLM_MAX_TOKENS", 2048),

@@ -38,14 +38,26 @@ class LiteLLMClient:
         }
         if self._settings.litellm_api_base:
             kwargs["api_base"] = self._settings.litellm_api_base
-        if self._settings.llm_api_key_provider:
-            kwargs["api_key"] = self._settings.llm_api_key_provider
+        resolved_key = self._resolve_provider_api_key()
+        if resolved_key:
+            kwargs["api_key"] = resolved_key
         if tools is not None:
             kwargs["tools"] = tools
             kwargs["tool_choice"] = tool_choice
 
         raw = await litellm.acompletion(**kwargs)
         return self._normalize_response(raw)
+
+    def _resolve_provider_api_key(self) -> str | None:
+        """Pick the provider API key based on the configured model.
+
+        OpenRouter keys (``openrouter/...`` models) take precedence over the
+        generic ``LLM_API_KEY_PROVIDER`` when both are set.
+        """
+        model = (self._settings.llm_model or "").lower()
+        if model.startswith("openrouter/") and self._settings.openrouter_api_key:
+            return self._settings.openrouter_api_key
+        return self._settings.llm_api_key_provider
 
     def _normalize_response(self, raw: Any) -> LLMResponse:
         choice = self._first_choice(raw)
