@@ -84,7 +84,7 @@ class RunListFilters(BaseModel):
 
 
 class RunStore(Protocol):
-    async def record(self, run: RunRecord) -> None: ...
+    async def record(self, run: RunRecord) -> bool: ...
     async def get(self, run_id: str) -> RunRecord | None: ...
     async def list(self, filters: RunListFilters) -> list[RunSummary]: ...
     async def count(self, filters: RunListFilters) -> int: ...
@@ -93,8 +93,8 @@ class RunStore(Protocol):
 class NullRunStore:
     """No-op store used when persistence is disabled."""
 
-    async def record(self, run: RunRecord) -> None:
-        return None
+    async def record(self, run: RunRecord) -> bool:
+        return False
 
     async def get(self, run_id: str) -> RunRecord | None:
         return None

@@ -136,7 +136,7 @@ export function App() {
     } catch (caught) {
       const message = caught instanceof Error ? caught.message : "Failed to load runs";
       setRunsError(message);
-      if (/404|Not Found/i.test(message)) {
+      if (/404|Not Found|disabled/i.test(message)) {
         setRunsAvailable(false);
       }
     } finally {

@@ -108,12 +108,14 @@ class SqliteRunStore:
         conn.execute("PRAGMA synchronous = NORMAL")
         return conn
 
-    async def record(self, run: RunRecord) -> None:
-        await self._ensure_initialized()
+    async def record(self, run: RunRecord) -> bool:
         try:
+            await self._ensure_initialized()
             await asyncio.to_thread(self._record_sync, run)
+            return True
         except Exception as exc:
             logger.warning("Failed to persist run %s: %s", run.id, exc)
+            return False
 
     def _record_sync(self, run: RunRecord) -> None:
         with self._connect() as conn:
@@ -257,9 +259,14 @@ def _build_where(filters: RunListFilters) -> tuple[str, tuple[Any, ...]]:
         clauses.append("created_at >= ?")
         params.append(_iso(filters.since))
     if filters.tag_key:
-        clauses.append("json_extract(tags, '$.' || ?) = ?")
-        params.append(filters.tag_key)
-        params.append(filters.tag_value if filters.tag_value is not None else "")
+        tag_path = _json_path(filters.tag_key)
+        if filters.tag_value is None:
+            clauses.append("json_type(tags, ?) IS NOT NULL")
+            params.append(tag_path)
+        else:
+            clauses.append("json_extract(tags, ?) = ?")
+            params.append(tag_path)
+            params.append(filters.tag_value)
     if not clauses:
         return "", ()
     return "WHERE " + " AND ".join(clauses), tuple(params)
@@ -340,6 +347,10 @@ def _iso(value: datetime) -> str:
 
 def _parse_iso(value: str) -> datetime:
     return datetime.fromisoformat(value)
+
+
+def _json_path(key: str) -> str:
+    return "$." + json.dumps(key)
 
 
 def _loads(value: str | None, default: Any) -> Any:

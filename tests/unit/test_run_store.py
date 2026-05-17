@@ -87,6 +87,13 @@ async def test_sqlite_store_list_and_filters(tmp_path) -> None:
     by_tag = await store.list(RunListFilters(tag_key="eval_set", tag_value="mock"))
     assert len(by_tag) == 3
 
+    by_tag_key = await store.list(RunListFilters(tag_key="scenario_id"))
+    assert len(by_tag_key) == 3
+
+    await store.record(_record(id="d", tags={"tag.with.dot": "yes"}))
+    by_dotted_tag = await store.list(RunListFilters(tag_key="tag.with.dot", tag_value="yes"))
+    assert [run.id for run in by_dotted_tag] == ["d"]
+
 
 @pytest.mark.asyncio
 async def test_sqlite_store_overwrites_on_replay(tmp_path) -> None:
@@ -144,6 +151,48 @@ def test_chat_persists_run_and_lists_it(tmp_path) -> None:
 def test_chat_omits_run_id_when_store_disabled() -> None:
     settings = Settings(graph_backend="mock", llm_backend="fake", runs_enabled=False)
     client = TestClient(create_app(settings))
+
+    response = client.post(
+        "/v1/graph/chat",
+        json={"messages": [{"role": "user", "content": "List users"}]},
+    )
+
+    assert response.status_code == 200
+    assert response.json().get("run_id") is None
+
+
+def test_runs_endpoint_returns_disabled_when_store_disabled() -> None:
+    settings = Settings(graph_backend="mock", llm_backend="fake", runs_enabled=False)
+    client = TestClient(create_app(settings))
+
+    list_response = client.get("/v1/runs")
+    detail_response = client.get("/v1/runs/does-not-exist")
+
+    assert list_response.status_code == 404
+    assert list_response.json()["detail"] == "run store disabled"
+    assert detail_response.status_code == 404
+    assert detail_response.json()["detail"] == "run store disabled"
+
+
+class FailingRunStore:
+    async def record(self, run: RunRecord) -> bool:
+        return False
+
+    async def get(self, run_id: str) -> RunRecord | None:
+        return None
+
+    async def list(self, filters: RunListFilters):
+        return []
+
+    async def count(self, filters: RunListFilters) -> int:
+        return 0
+
+
+def test_chat_omits_run_id_when_persistence_fails() -> None:
+    settings = Settings(graph_backend="mock", llm_backend="fake", runs_enabled=True)
+    app = create_app(settings)
+    app.state.chat_service._run_store = FailingRunStore()
+    client = TestClient(app)
 
     response = client.post(
         "/v1/graph/chat",

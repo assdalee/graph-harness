@@ -33,7 +33,6 @@ class ChatService:
             return response
 
         run_id = str(uuid.uuid4())
-        response.run_id = run_id
         record = RunRecord(
             id=run_id,
             thread_id=response.thread_id,
@@ -56,7 +55,8 @@ class ChatService:
             config_snapshot=_config_snapshot(self._settings),
             tags=dict(request.tags or {}),
         )
-        await self._run_store.record(record)
+        if await self._run_store.record(record):
+            response.run_id = run_id
         return response
 
 
