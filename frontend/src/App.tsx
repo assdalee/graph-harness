@@ -2,14 +2,21 @@ import {
   Activity,
   AlertTriangle,
   CheckCircle2,
-  Clock,
+  History,
   KeyRound,
+  Loader2,
   RefreshCw,
   Search,
   Send,
   Server,
   ShieldCheck,
+  Sparkles,
+  Users,
+  Bell,
+  KeySquare,
+  UserSearch,
   Wrench,
+  X,
   XCircle,
 } from "lucide-react";
 import { FormEvent, useEffect, useMemo, useState } from "react";
@@ -18,16 +25,19 @@ import {
   ChatMessage,
   ChatResponse,
   OperationSummary,
+  RunSummary as RunRow,
   getHealth,
   getOperations,
+  getRun,
+  listRuns,
   sendChat,
 } from "./api";
 
-const EXAMPLES = [
-  "List users",
-  "Find Sarah Chen",
-  "List high severity alerts",
-  "Show OAuth grants",
+const EXAMPLES: Array<{ label: string; icon: typeof Users }> = [
+  { label: "List users", icon: Users },
+  { label: "Find Sarah Chen", icon: UserSearch },
+  { label: "List high severity alerts", icon: Bell },
+  { label: "Show OAuth grants", icon: KeySquare },
 ];
 
 export function App() {
@@ -37,11 +47,16 @@ export function App() {
   const [operations, setOperations] = useState<OperationSummary[]>([]);
   const [operationFilter, setOperationFilter] = useState("");
   const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [input, setInput] = useState(EXAMPLES[0]);
+  const [input, setInput] = useState(EXAMPLES[0].label);
   const [threadId, setThreadId] = useState<string | null>(null);
   const [selectedResponse, setSelectedResponse] = useState<ChatResponse | null>(null);
   const [isSending, setIsSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [runsOpen, setRunsOpen] = useState(false);
+  const [runs, setRuns] = useState<RunRow[]>([]);
+  const [runsLoading, setRunsLoading] = useState(false);
+  const [runsError, setRunsError] = useState<string | null>(null);
+  const [runsAvailable, setRunsAvailable] = useState(true);
 
   async function refreshMetadata() {
     setHealth("checking");
@@ -111,6 +126,58 @@ export function App() {
     setError(null);
   }
 
+  async function loadRuns() {
+    setRunsLoading(true);
+    setRunsError(null);
+    try {
+      const response = await listRuns({ limit: 50 }, { apiKey });
+      setRuns(response.runs);
+      setRunsAvailable(true);
+    } catch (caught) {
+      const message = caught instanceof Error ? caught.message : "Failed to load runs";
+      setRunsError(message);
+      if (/404|Not Found|disabled/i.test(message)) {
+        setRunsAvailable(false);
+      }
+    } finally {
+      setRunsLoading(false);
+    }
+  }
+
+  function openRuns() {
+    setRunsOpen(true);
+    void loadRuns();
+  }
+
+  async function selectRun(runId: string) {
+    setRunsError(null);
+    try {
+      const record = await getRun(runId, { apiKey });
+      const synthetic: ChatResponse = {
+        thread_id: record.thread_id,
+        run_id: record.id,
+        answer: record.answer,
+        status: record.status,
+        stop_reason: record.stop_reason,
+        turns: record.turns,
+        data: record.data,
+        tool_calls: record.tool_calls,
+        messages: record.messages,
+        warnings: record.warnings,
+        trace_events: record.trace_events,
+      };
+      setSelectedResponse(synthetic);
+      setMessages([
+        { role: "user", content: record.input_message || "(no input)" },
+        { role: "assistant", content: record.answer, response: synthetic },
+      ]);
+      setThreadId(record.thread_id ?? null);
+      setRunsOpen(false);
+    } catch (caught) {
+      setRunsError(caught instanceof Error ? caught.message : "Failed to open run");
+    }
+  }
+
   const latestResponse = selectedResponse ?? [...messages].reverse().find((m) => m.response)?.response ?? null;
 
   return (
@@ -171,7 +238,9 @@ export function App() {
               title={operation.description}
             >
               <span>{operation.name}</span>
-              <small>{operation.read_only ? "read" : "write"}</small>
+              <small className={`tag ${operation.read_only ? "tag-read" : "tag-write"}`}>
+                {operation.read_only ? "read" : "write"}
+              </small>
             </button>
           ))}
         </div>
@@ -183,9 +252,16 @@ export function App() {
             <h2>Agent Console</h2>
             <p>{threadId ? `thread ${threadId}` : "new thread"}</p>
           </div>
-          <button className="secondary-button" onClick={resetThread}>
-            New thread
-          </button>
+          <div className="topbar-actions">
+            <button className="secondary-button" onClick={openRuns} title="View past runs">
+              <History size={14} aria-hidden="true" />
+              History
+            </button>
+            <button className="secondary-button" onClick={resetThread}>
+              <RefreshCw size={14} aria-hidden="true" />
+              New thread
+            </button>
+          </div>
         </header>
 
         {error ? (
@@ -198,11 +274,25 @@ export function App() {
         <section className="chat-panel" aria-label="Conversation">
           {messages.length === 0 ? (
             <div className="empty-state">
-              {EXAMPLES.map((example) => (
-                <button key={example} onClick={() => setInput(example)}>
-                  {example}
-                </button>
-              ))}
+              <div className="empty-state-card">
+                <span className="empty-state-eyebrow">
+                  <Sparkles size={12} aria-hidden="true" />
+                  Get started
+                </span>
+                <h3>Talk to the graph</h3>
+                <p>
+                  Ask the agent to query Microsoft Graph through typed tool contracts. Every run is
+                  traced — tool calls, status, and trace events appear in the inspector on the right.
+                </p>
+                <div className="empty-state-grid">
+                  {EXAMPLES.map(({ label, icon: Icon }) => (
+                    <button key={label} onClick={() => setInput(label)}>
+                      <Icon size={16} aria-hidden="true" />
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
             </div>
           ) : (
             <div className="messages">
@@ -212,8 +302,13 @@ export function App() {
                   className={`message message-${message.role}`}
                   onClick={() => message.response && setSelectedResponse(message.response)}
                 >
-                  <span>{message.role}</span>
-                  <p>{message.content}</p>
+                  <span className="message-avatar" aria-hidden="true">
+                    {message.role === "user" ? "You" : <ShieldCheck size={16} />}
+                  </span>
+                  <span className="message-body">
+                    <span className="message-role">{message.role}</span>
+                    <p className="message-content">{message.content}</p>
+                  </span>
                 </button>
               ))}
             </div>
@@ -224,7 +319,13 @@ export function App() {
           <textarea
             value={input}
             onChange={(event) => setInput(event.target.value)}
-            placeholder="Ask GraphHarness"
+            onKeyDown={(event) => {
+              if (event.key === "Enter" && !event.shiftKey) {
+                event.preventDefault();
+                event.currentTarget.form?.requestSubmit();
+              }
+            }}
+            placeholder="Ask GraphHarness…"
             rows={2}
           />
           <button
@@ -234,8 +335,15 @@ export function App() {
             aria-label={isSending ? "Running request" : "Send message"}
             title={isSending ? "Running" : "Send"}
           >
-            {isSending ? <Clock size={18} aria-hidden="true" /> : <Send size={18} aria-hidden="true" />}
+            {isSending ? (
+              <Loader2 className="sending" size={18} aria-hidden="true" />
+            ) : (
+              <Send size={18} aria-hidden="true" />
+            )}
           </button>
+          <span className="composer-hint">
+            Press <kbd>Enter</kbd> to send · <kbd>Shift</kbd>+<kbd>Enter</kbd> for newline
+          </span>
         </form>
       </main>
 
@@ -244,8 +352,114 @@ export function App() {
         <ToolTimeline response={latestResponse} />
         <TraceTable events={latestResponse?.trace_events ?? []} />
       </aside>
+
+      {runsOpen ? (
+        <RunsDrawer
+          runs={runs}
+          loading={runsLoading}
+          error={runsError}
+          available={runsAvailable}
+          onClose={() => setRunsOpen(false)}
+          onRefresh={() => void loadRuns()}
+          onSelect={(runId) => void selectRun(runId)}
+        />
+      ) : null}
     </div>
   );
+}
+
+function RunsDrawer({
+  runs,
+  loading,
+  error,
+  available,
+  onClose,
+  onRefresh,
+  onSelect,
+}: {
+  runs: RunRow[];
+  loading: boolean;
+  error: string | null;
+  available: boolean;
+  onClose: () => void;
+  onRefresh: () => void;
+  onSelect: (runId: string) => void;
+}) {
+  return (
+    <div className="drawer-overlay" role="dialog" aria-modal="true" onClick={onClose}>
+      <div className="drawer" onClick={(event) => event.stopPropagation()}>
+        <header className="drawer-header">
+          <div>
+            <h3>Run history</h3>
+            <p>{available ? `${runs.length} most recent run${runs.length === 1 ? "" : "s"}` : "Run store disabled"}</p>
+          </div>
+          <div className="drawer-actions">
+            <button className="icon-button" onClick={onRefresh} title="Refresh">
+              <RefreshCw size={16} aria-hidden="true" className={loading ? "sending" : undefined} />
+            </button>
+            <button className="icon-button" onClick={onClose} title="Close">
+              <X size={16} aria-hidden="true" />
+            </button>
+          </div>
+        </header>
+
+        {!available ? (
+          <div className="placeholder">
+            Set <code>RUNS_ENABLED=true</code> in the backend env to capture run history.
+          </div>
+        ) : error ? (
+          <div className="alert" role="alert">
+            <AlertTriangle size={16} aria-hidden="true" />
+            <span>{error}</span>
+          </div>
+        ) : loading && runs.length === 0 ? (
+          <div className="placeholder">Loading…</div>
+        ) : runs.length === 0 ? (
+          <div className="placeholder">No runs recorded yet.</div>
+        ) : (
+          <ul className="runs-list">
+            {runs.map((run) => (
+              <li key={run.id}>
+                <button className="run-item" onClick={() => onSelect(run.id)}>
+                  <div className="run-item-row">
+                    <span className={`run-status run-status-${run.status}`}>{run.status}</span>
+                    <span className="run-meta">{formatRelativeTime(run.created_at)}</span>
+                  </div>
+                  <div className="run-item-message">{run.input_message || <em>(no input)</em>}</div>
+                  <div className="run-item-row run-item-footer">
+                    <span title="tool calls">
+                      <Wrench size={12} aria-hidden="true" />
+                      {run.tool_call_count}
+                    </span>
+                    <span title="turns">
+                      <Activity size={12} aria-hidden="true" />
+                      {run.turns}
+                    </span>
+                    <span title="duration">{run.duration_ms} ms</span>
+                    {run.llm_model ? <span className="run-model">{run.llm_model}</span> : null}
+                  </div>
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function formatRelativeTime(iso: string): string {
+  const then = new Date(iso).getTime();
+  if (Number.isNaN(then)) return iso;
+  const diff = Date.now() - then;
+  const seconds = Math.round(diff / 1000);
+  if (seconds < 60) return `${seconds}s ago`;
+  const minutes = Math.round(seconds / 60);
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.round(hours / 24);
+  return `${days}d ago`;
 }
 
 function HealthBadge({ status }: { status: "checking" | "healthy" | "offline" }) {

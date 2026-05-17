@@ -51,6 +51,7 @@ export type AgentTraceEvent = {
 
 export type ChatResponse = {
   thread_id: string | null;
+  run_id: string | null;
   answer: string;
   status: string;
   stop_reason: string;
@@ -60,6 +61,44 @@ export type ChatResponse = {
   messages: Array<Record<string, unknown>>;
   warnings: string[];
   trace_events: AgentTraceEvent[];
+};
+
+export type RunSummary = {
+  id: string;
+  thread_id: string | null;
+  user_id: string | null;
+  created_at: string;
+  finished_at: string;
+  duration_ms: number;
+  input_message: string;
+  llm_model: string | null;
+  llm_backend: string | null;
+  status: string;
+  stop_reason: string;
+  turns: number;
+  tool_call_count: number;
+  warning_count: number;
+  tags: Record<string, unknown>;
+};
+
+export type RunRecord = ChatResponse & {
+  id: string;
+  user_id: string | null;
+  created_at: string;
+  finished_at: string;
+  duration_ms: number;
+  input_message: string;
+  llm_model: string | null;
+  llm_backend: string | null;
+  config_snapshot: Record<string, unknown>;
+  tags: Record<string, unknown>;
+};
+
+export type RunListResponse = {
+  runs: RunSummary[];
+  total: number;
+  limit: number;
+  offset: number;
 };
 
 export type ChatMessage = {
@@ -96,6 +135,26 @@ export async function sendChat(
     },
     options,
   );
+}
+
+export async function listRuns(
+  params: { status?: string; threadId?: string; limit?: number } = {},
+  options: RequestOptions = {},
+): Promise<RunListResponse> {
+  const search = new URLSearchParams();
+  if (params.status) search.set("status", params.status);
+  if (params.threadId) search.set("thread_id", params.threadId);
+  search.set("limit", String(params.limit ?? 50));
+  const query = search.toString();
+  return request<RunListResponse>(
+    `/v1/runs${query ? `?${query}` : ""}`,
+    { method: "GET" },
+    options,
+  );
+}
+
+export async function getRun(runId: string, options: RequestOptions = {}): Promise<RunRecord> {
+  return request<RunRecord>(`/v1/runs/${encodeURIComponent(runId)}`, { method: "GET" }, options);
 }
 
 async function request<T>(

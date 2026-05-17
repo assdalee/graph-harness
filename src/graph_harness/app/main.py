@@ -6,6 +6,8 @@ from graph_harness.agent.agent import GraphAgent
 from graph_harness.app.routes.chat import create_chat_router
 from graph_harness.app.routes.health import create_health_router
 from graph_harness.app.routes.operations import create_operations_router
+from graph_harness.app.routes.runs import create_runs_router
+from graph_harness.runs.store import build_run_store
 from graph_harness.core.config import Settings, get_settings
 from graph_harness.core.errors import AppError
 from graph_harness.core.logging import configure_logging
@@ -59,16 +61,20 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         settings=settings,
     )
 
+    run_store = build_run_store(settings)
+
     app.state.settings = settings
     app.state.graph_operation_catalog = catalog
     app.state.tool_registry = registry
-    app.state.chat_service = ChatService(agent)
+    app.state.run_store = run_store
+    app.state.chat_service = ChatService(agent, run_store=run_store, settings=settings)
     app.state.operations_service = OperationsService(registry)
 
     auth_dependency = build_api_key_dependency(settings)
     app.include_router(create_health_router(settings.app_name))
     app.include_router(create_operations_router(auth_dependency))
     app.include_router(create_chat_router(auth_dependency))
+    app.include_router(create_runs_router(auth_dependency))
 
     @app.exception_handler(AppError)
     async def app_error_handler(_request: Request, exc: AppError) -> JSONResponse:

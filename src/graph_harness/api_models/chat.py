@@ -33,6 +33,7 @@ class ChatRequest(BaseModel):
     messages: list[ChatMessageIn] | None = None
     thread_id: str | None = None
     user_id: str | None = None
+    tags: dict[str, Any] = Field(default_factory=dict)
 
     def normalized_input(self) -> ChatInput:
         if self.input is not None:
@@ -62,6 +63,7 @@ class AgentTraceEvent(BaseModel):
 
 class ChatResponse(BaseModel):
     thread_id: str | None = None
+    run_id: str | None = None
     answer: str = ""
     status: str = Field(default="completed")
     stop_reason: str = Field(default="final_answer")
