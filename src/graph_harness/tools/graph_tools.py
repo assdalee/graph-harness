@@ -647,20 +647,28 @@ class GraphToolFactory:
     async def graph_operation(self, args: GenericGraphOperationArgs) -> Any:
         operation = self._catalog.get(args.operation_name)
         if operation is None:
-            return {"error": {"message": f"Unknown operation '{args.operation_name}'."}}
+            return ToolResult.failure(
+                "validation_error",
+                f"Unknown operation '{args.operation_name}'.",
+                details={"operation_name": args.operation_name},
+            )
         if not operation.read_only and not args.confirmed:
-            return {
-                "error": {
-                    "message": (
-                        f"Operation '{args.operation_name}' mutates Microsoft Graph data "
-                        "and requires confirmed=true."
-                    )
-                }
-            }
+            return ToolResult.failure(
+                "confirmation_required",
+                (
+                    f"Operation '{args.operation_name}' mutates Microsoft Graph data "
+                    "and requires confirmed=true before execution."
+                ),
+                details={"operation_name": args.operation_name},
+            )
         try:
             endpoint = operation.endpoint.format(**args.path_params)
         except KeyError as exc:
-            return {"error": {"message": f"Missing path parameter: {exc.args[0]}."}}
+            return ToolResult.failure(
+                "validation_error",
+                f"Missing path parameter: {exc.args[0]}.",
+                details={"missing_param": exc.args[0]},
+            )
         return await self._client.request(
             operation.method,
             endpoint,
