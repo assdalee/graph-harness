@@ -25,7 +25,9 @@ class Settings(BaseModel):
     graph_backend: str = "live"
     graph_client_id: str = ""
     graph_client_secret: str = ""
-    graph_scopes: list[str] = Field(default_factory=lambda: ["https://graph.microsoft.com/.default"])
+    graph_scopes: list[str] = Field(
+        default_factory=lambda: ["https://graph.microsoft.com/.default"]
+    )
     graph_default_api_version: str = "v1.0"
     graph_timeout_seconds: float = 30
 
@@ -42,6 +44,8 @@ class Settings(BaseModel):
     agent_log_trace_events: bool = True
     agent_parallel_reads: bool = True
     agent_require_mutation_confirmation: bool = True
+    agent_enable_domain_tool_selection: bool = True
+    agent_domain_tool_selection_max_tools: int = 16
 
     runs_enabled: bool = False
     runs_backend: str = "sqlite"
@@ -94,6 +98,11 @@ class Settings(BaseModel):
     def clamp_context_max_tool_chars(cls, value: int) -> int:
         return max(400, min(value, 12000))
 
+    @field_validator("agent_domain_tool_selection_max_tools")
+    @classmethod
+    def clamp_domain_tool_selection_max_tools(cls, value: int) -> int:
+        return max(3, min(value, 50))
+
     @classmethod
     def from_env(cls) -> "Settings":
         load_dotenv(override=False)
@@ -133,6 +142,14 @@ class Settings(BaseModel):
             agent_require_mutation_confirmation=_get_bool(
                 "AGENT_REQUIRE_MUTATION_CONFIRMATION",
                 True,
+            ),
+            agent_enable_domain_tool_selection=_get_bool(
+                "AGENT_ENABLE_DOMAIN_TOOL_SELECTION",
+                True,
+            ),
+            agent_domain_tool_selection_max_tools=_get_int(
+                "AGENT_DOMAIN_TOOL_SELECTION_MAX_TOOLS",
+                16,
             ),
             runs_enabled=_get_bool("RUNS_ENABLED", False),
             runs_backend=_get_str("RUNS_BACKEND", "sqlite"),

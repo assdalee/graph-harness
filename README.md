@@ -70,6 +70,7 @@ Core layers:
 - Mock Microsoft Graph backend
 - Fake deterministic LLM backend
 - Mock eval scenarios
+- Optional DeepEval LLM-as-judge quality evals
 - Live read-only Microsoft Graph smoke test
 - One-command quality gate
 
@@ -180,10 +181,17 @@ AGENT_MAX_TOOL_CALLS=8
 AGENT_ENABLE_CLARIFICATION_POLICY=true
 AGENT_ENABLE_CONTEXT_COMPACTION=true
 AGENT_REQUIRE_MUTATION_CONFIRMATION=true
+AGENT_ENABLE_DOMAIN_TOOL_SELECTION=true
+AGENT_DOMAIN_TOOL_SELECTION_MAX_TOOLS=16
 ```
 
 Set `LLM_MODEL` to any LiteLLM-supported model string, such as OpenAI, Azure OpenAI, Anthropic,
 Gemini, Ollama, vLLM, or another OpenAI-compatible backend.
+
+Graph tools are organized into Microsoft Graph capability domains such as identity/access,
+security, audit/activity, devices, and catalog operations. Domain-aware tool selection is enabled
+by default so the model sees a smaller, more relevant tool schema set per turn while the executor
+still enforces the full typed registry and safety policies.
 
 For deterministic no-LLM tests:
 
@@ -211,6 +219,19 @@ Print full eval JSON:
 ```bash
 uv run python scripts/run_mock_evals.py --json
 ```
+
+Run optional DeepEval quality evals with an Anthropic judge:
+
+```bash
+uv sync --extra dev --extra eval
+export DEEPEVAL_JUDGE_MODEL=anthropic/claude-3-5-sonnet-20241022
+export ANTHROPIC_API_KEY=...
+uv run python scripts/run_deepeval.py
+```
+
+DeepEval runs use the mock Graph backend and fake app LLM. The Anthropic key is only used as
+the LLM-as-judge for answer quality, tool faithfulness, and guardrail-safety checks. The runner
+skips cleanly when DeepEval or the judge key is not configured.
 
 Run the full local quality gate:
 

@@ -17,6 +17,10 @@ class ToolDefinition:
     handler: ToolHandler
     read_only: bool = True
     requires_confirmation: bool = False
+    domain: str = "general"
+    safety: str = "read_only"
+    required_permissions: tuple[str, ...] = ()
+    tags: tuple[str, ...] = ()
 
     def to_openai_tool(self) -> dict[str, Any]:
         return {

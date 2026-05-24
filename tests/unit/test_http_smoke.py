@@ -26,7 +26,10 @@ def test_operations_endpoint_lists_mock_tools() -> None:
     assert response.status_code == 200
     payload = response.json()
     tool_names = {item["name"] for item in payload["operations"]}
+    domains = {item["name"] for item in payload["domains"]}
     assert payload["operation_count"] >= 10
+    assert payload["domain_count"] >= 5
+    assert {"identity_access", "security", "audit_activity"} <= domains
     assert {
         "list_users",
         "resolve_user",
@@ -34,6 +37,10 @@ def test_operations_endpoint_lists_mock_tools() -> None:
         "list_oauth_permission_grants",
         "delete_oauth_permission_grant",
     } <= tool_names
+    security_alert = next(
+        item for item in payload["operations"] if item["name"] == "list_security_alerts"
+    )
+    assert security_alert["domain"] == "security"
 
 
 def test_chat_endpoint_uses_mock_agent_stack() -> None:

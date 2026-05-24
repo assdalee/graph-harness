@@ -11,6 +11,7 @@ from graph_harness.core.config import Settings
 from graph_harness.llm.client import LiteLLMClient
 from graph_harness.llm.prompts import FINAL_RESPONSE_INSTRUCTION, GRAPH_AGENT_SYSTEM_PROMPT
 from graph_harness.llm.types import LLMResponse, LLMToolCall
+from graph_harness.tools.base import ToolDefinition
 from graph_harness.tools.executor import ToolExecutor, extract_data
 from graph_harness.tools.registry import ToolRegistry
 
@@ -40,25 +41,39 @@ class GraphAgent:
         self._clarification_policy = ClarificationPolicy(settings)
         self._context_compactor = ContextCompactor(settings)
 
-    async def run(self, *, messages: list[dict[str, Any]], thread_id: str | None = None) -> ChatResponse:
+    async def run(
+        self, *, messages: list[dict[str, Any]], thread_id: str | None = None
+    ) -> ChatResponse:
         state = AgentRunState(messages=self._initial_messages(messages))
         answer = ""
         tool_call_counts: dict[str, int] = {}
-        self._trace(state, "run_started", "Agent run started.", thread_id=thread_id, message_count=len(messages))
+        self._trace(
+            state,
+            "run_started",
+            "Agent run started.",
+            thread_id=thread_id,
+            message_count=len(messages),
+        )
 
         for turn in range(self._settings.agent_max_turns):
             state.turn = turn + 1
             self._trace(state, "turn_started", "Agent turn started.")
+            selected_tools = self._select_tools_for_turn(state)
             response = await self._safe_complete(
                 state,
-                tools=self._registry.openai_tools(),
+                tools=[tool.to_openai_tool() for tool in selected_tools],
                 tool_choice="auto",
             )
             if response is None:
                 answer = self._fallback_answer(state)
                 state.status = "failed"
                 state.stop_reason = "llm_error"
-                self._trace(state, "run_failed", "Stopping after LLM failure.", stop_reason=state.stop_reason)
+                self._trace(
+                    state,
+                    "run_failed",
+                    "Stopping after LLM failure.",
+                    stop_reason=state.stop_reason,
+                )
                 break
 
             if not response.tool_calls:
@@ -183,7 +198,12 @@ class GraphAgent:
             answer = self._fallback_answer(state)
             state.status = "failed"
             state.stop_reason = state.stop_reason or "no_answer"
-            self._trace(state, "fallback_answer", "Generated fallback answer.", stop_reason=state.stop_reason)
+            self._trace(
+                state,
+                "fallback_answer",
+                "Generated fallback answer.",
+                stop_reason=state.stop_reason,
+            )
 
         self._trace(
             state,
@@ -217,12 +237,51 @@ class GraphAgent:
             *user_messages,
         ]
 
+    def _select_tools_for_turn(self, state: AgentRunState) -> list[ToolDefinition]:
+        if not self._settings.agent_enable_domain_tool_selection:
+            tools = self._registry.list()
+            self._trace(
+                state,
+                "tool_context_selected",
+                "Selected full tool context.",
+                selection_mode="all",
+                tool_count=len(tools),
+            )
+            return tools
+
+        query = self._tool_selection_query(state.messages)
+        tools = self._registry.select_tools_for_query(
+            query,
+            max_tools=self._settings.agent_domain_tool_selection_max_tools,
+        )
+        self._trace(
+            state,
+            "tool_context_selected",
+            "Selected domain-aware tool context.",
+            selection_mode="domain",
+            tool_count=len(tools),
+            domains=sorted({tool.domain for tool in tools}),
+            tools=[tool.name for tool in tools],
+        )
+        return tools
+
+    @staticmethod
+    def _tool_selection_query(messages: list[dict[str, Any]]) -> str:
+        recent_user_messages = [
+            str(message.get("content") or "")
+            for message in messages
+            if message.get("role") == "user"
+        ][-3:]
+        return "\n".join(recent_user_messages)
+
     async def _finalize(self, state: AgentRunState) -> str:
         final_messages = [
             *state.messages,
             {"role": "user", "content": FINAL_RESPONSE_INSTRUCTION},
         ]
-        response = await self._safe_complete(state, messages=final_messages, tools=None, tool_choice=None)
+        response = await self._safe_complete(
+            state, messages=final_messages, tools=None, tool_choice=None
+        )
         if response is None:
             return ""
         content = response.content.strip()
@@ -294,11 +353,15 @@ class GraphAgent:
     ) -> list[LLMToolCall]:
         filtered: list[LLMToolCall] = []
         for call in calls[: self._settings.agent_max_tool_calls]:
-            signature = json.dumps({"name": call.name, "args": call.args}, sort_keys=True, default=str)
+            signature = json.dumps(
+                {"name": call.name, "args": call.args}, sort_keys=True, default=str
+            )
             counts[signature] = counts.get(signature, 0) + 1
             if counts[signature] > self._settings.agent_repeated_tool_call_limit:
                 state.warnings.append(f"Skipped repeated tool call: {call.name}.")
-                self._trace(state, "tool_call_skipped", "Skipped repeated tool call.", tool=call.name)
+                self._trace(
+                    state, "tool_call_skipped", "Skipped repeated tool call.", tool=call.name
+                )
                 continue
             filtered.append(call)
 
@@ -310,14 +373,21 @@ class GraphAgent:
 
     async def _finalize_or_fallback(self, state: AgentRunState, stop_reason: str) -> str:
         state.stop_reason = stop_reason
-        self._trace(state, "finalization_started", "Starting final response synthesis.", stop_reason=stop_reason)
+        self._trace(
+            state,
+            "finalization_started",
+            "Starting final response synthesis.",
+            stop_reason=stop_reason,
+        )
         answer = await self._finalize(state)
         if answer.strip():
             state.status = "completed"
             self._trace(state, "finalization_succeeded", "Final response synthesis succeeded.")
             return answer
         state.status = "partial" if state.tool_calls else "failed"
-        self._trace(state, "finalization_failed", "Final response synthesis failed; using fallback.")
+        self._trace(
+            state, "finalization_failed", "Final response synthesis failed; using fallback."
+        )
         return self._fallback_answer(state)
 
     def _fallback_answer(self, state: AgentRunState) -> str:
@@ -328,7 +398,9 @@ class GraphAgent:
                 for record in state.tool_calls
                 if record.error
             ]
-            lines = ["I could not get a final model-written answer, but tool execution produced results."]
+            lines = [
+                "I could not get a final model-written answer, but tool execution produced results."
+            ]
             if summaries:
                 lines.append("Tool summaries:")
                 lines.extend(f"- {summary}" for summary in summaries[:8])
@@ -336,7 +408,9 @@ class GraphAgent:
                 lines.append("Tool errors:")
                 lines.extend(f"- {error}" for error in errors[:5])
             return "\n".join(lines)
-        return "I could not complete the request because the model did not return a usable response."
+        return (
+            "I could not complete the request because the model did not return a usable response."
+        )
 
     def _trace(self, state: AgentRunState, event: str, message: str = "", **metadata: Any) -> None:
         trace_event = AgentTraceEvent(

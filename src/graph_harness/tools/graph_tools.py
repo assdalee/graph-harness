@@ -4,6 +4,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
+from graph_harness.graph.domains.base import DomainMetadata, GraphDomain
 from graph_harness.graph.client import GraphClient
 from graph_harness.graph.operations import GraphOperationCatalog
 from graph_harness.tools.base import ConfirmableArgs, ToolDefinition
@@ -13,7 +14,9 @@ from graph_harness.tools.results import ToolResult
 
 class PaginationArgs(BaseModel):
     top: int | None = Field(default=25, ge=1, le=999)
-    all_pages: bool = Field(default=False, description="Fetch additional pages when Graph returns @odata.nextLink.")
+    all_pages: bool = Field(
+        default=False, description="Fetch additional pages when Graph returns @odata.nextLink."
+    )
     max_pages: int = Field(default=1, ge=1, le=10)
 
 
@@ -128,6 +131,311 @@ class GenericGraphOperationArgs(ConfirmableArgs):
     api_version: str | None = None
 
 
+class IdentityAccessDomain(GraphDomain):
+    metadata = DomainMetadata(
+        name="identity_access",
+        display_name="Identity and Access",
+        description=(
+            "Users, groups, directory apps, service principals, OAuth grants, and "
+            "identity mutations such as session revocation or group membership changes."
+        ),
+        required_permissions=(
+            "User.Read.All",
+            "Group.Read.All",
+            "Directory.Read.All",
+            "Application.Read.All",
+            "DelegatedPermissionGrant.ReadWrite.All",
+        ),
+        tags=(
+            "identity",
+            "access",
+            "entra",
+            "azure ad",
+            "users",
+            "groups",
+            "apps",
+            "service principals",
+            "oauth",
+            "permissions",
+            "resolve",
+            "lookup",
+            "name",
+            "mail",
+            "upn",
+        ),
+    )
+
+    def __init__(self, handlers: Any) -> None:
+        self._handlers = handlers
+
+    def tools(self) -> list[ToolDefinition]:
+        return [
+            _tool(
+                "resolve_user",
+                "Resolve a user name, mail, UPN, or ID to exact Graph user identifiers.",
+                ResolveUserArgs,
+                self._handlers.resolve_user,
+                domain=self.metadata.name,
+                tags=("user", "identity", "lookup", "resolver"),
+            ),
+            _tool(
+                "resolve_group",
+                "Resolve a group name, mail nickname, mail, or ID to exact Graph group identifiers.",
+                ResolveGroupArgs,
+                self._handlers.resolve_group,
+                domain=self.metadata.name,
+                tags=("group", "identity", "lookup", "resolver"),
+            ),
+            _tool(
+                "list_users",
+                "List directory users.",
+                ListUsersArgs,
+                self._handlers.list_users,
+                domain=self.metadata.name,
+                tags=("users", "directory", "read"),
+            ),
+            _tool(
+                "get_user",
+                "Get a user by object ID or UPN.",
+                GetUserArgs,
+                self._handlers.get_user,
+                domain=self.metadata.name,
+                tags=("user", "directory", "read"),
+            ),
+            _tool(
+                "search_user",
+                "Search users by display name, mail, or UPN.",
+                SearchUserArgs,
+                self._handlers.search_user,
+                domain=self.metadata.name,
+                tags=("user", "search", "directory"),
+            ),
+            _tool(
+                "update_user",
+                "Update user properties.",
+                UpdateUserArgs,
+                self._handlers.update_user,
+                read_only=False,
+                requires_confirmation=True,
+                domain=self.metadata.name,
+                safety="mutation",
+                tags=("user", "update", "mutation"),
+            ),
+            _tool(
+                "delete_user",
+                "Delete a user.",
+                DeleteUserArgs,
+                self._handlers.delete_user,
+                read_only=False,
+                requires_confirmation=True,
+                domain=self.metadata.name,
+                safety="destructive",
+                tags=("user", "delete", "mutation"),
+            ),
+            _tool(
+                "revoke_user_sessions",
+                "Revoke all sign-in sessions for a user.",
+                RevokeUserSessionsArgs,
+                self._handlers.revoke_user_sessions,
+                read_only=False,
+                requires_confirmation=True,
+                domain=self.metadata.name,
+                safety="security_mutation",
+                tags=("user", "sessions", "revoke", "mutation"),
+            ),
+            _tool(
+                "list_groups",
+                "List Microsoft 365 groups.",
+                ListGroupsArgs,
+                self._handlers.list_groups,
+                domain=self.metadata.name,
+                tags=("groups", "directory", "read"),
+            ),
+            _tool(
+                "get_group",
+                "Get a group by ID.",
+                GetGroupArgs,
+                self._handlers.get_group,
+                domain=self.metadata.name,
+                tags=("group", "directory", "read"),
+            ),
+            _tool(
+                "list_group_members",
+                "List members of a group.",
+                ListGroupMembersArgs,
+                self._handlers.list_group_members,
+                domain=self.metadata.name,
+                tags=("group", "members", "read"),
+            ),
+            _tool(
+                "add_group_member",
+                "Add a directory object to a group.",
+                AddGroupMemberArgs,
+                self._handlers.add_group_member,
+                read_only=False,
+                requires_confirmation=True,
+                domain=self.metadata.name,
+                safety="mutation",
+                tags=("group", "member", "add", "mutation"),
+            ),
+            _tool(
+                "remove_group_member",
+                "Remove a directory object from a group.",
+                RemoveGroupMemberArgs,
+                self._handlers.remove_group_member,
+                read_only=False,
+                requires_confirmation=True,
+                domain=self.metadata.name,
+                safety="mutation",
+                tags=("group", "member", "remove", "mutation"),
+            ),
+            _tool(
+                "list_service_principals",
+                "List Entra service principals.",
+                ListServicePrincipalsArgs,
+                self._handlers.list_service_principals,
+                domain=self.metadata.name,
+                tags=("apps", "service principals", "identity", "read"),
+            ),
+            _tool(
+                "list_oauth_permission_grants",
+                "List OAuth permission grants.",
+                ListOAuthPermissionGrantsArgs,
+                self._handlers.list_oauth_permission_grants,
+                domain=self.metadata.name,
+                tags=("oauth", "permission", "grant", "consent", "read"),
+            ),
+            _tool(
+                "delete_oauth_permission_grant",
+                "Delete an OAuth permission grant.",
+                DeleteOAuthPermissionGrantArgs,
+                self._handlers.delete_oauth_permission_grant,
+                read_only=False,
+                requires_confirmation=True,
+                domain=self.metadata.name,
+                safety="destructive",
+                tags=("oauth", "permission", "grant", "delete", "mutation"),
+            ),
+        ]
+
+
+class SecurityDomain(GraphDomain):
+    metadata = DomainMetadata(
+        name="security",
+        display_name="Security",
+        description="Microsoft Graph security alerts, incidents, and security investigation data.",
+        required_permissions=("SecurityEvents.Read.All", "SecurityIncident.Read.All"),
+        tags=("security", "defender", "alerts", "incidents", "risk"),
+    )
+
+    def __init__(self, handlers: Any) -> None:
+        self._handlers = handlers
+
+    def tools(self) -> list[ToolDefinition]:
+        return [
+            _tool(
+                "list_security_alerts",
+                "List Microsoft Graph security alerts.",
+                SecurityListArgs,
+                self._handlers.list_security_alerts,
+                domain=self.metadata.name,
+                tags=("security", "alerts", "defender", "severity"),
+            ),
+            _tool(
+                "list_security_incidents",
+                "List Microsoft Graph security incidents.",
+                SecurityListArgs,
+                self._handlers.list_security_incidents,
+                domain=self.metadata.name,
+                tags=("security", "incidents", "defender", "investigation"),
+            ),
+        ]
+
+
+class AuditActivityDomain(GraphDomain):
+    metadata = DomainMetadata(
+        name="audit_activity",
+        display_name="Audit and Activity",
+        description="Sign-in logs, directory audit events, and tenant activity investigation.",
+        required_permissions=("AuditLog.Read.All", "Directory.Read.All"),
+        tags=("audit", "activity", "logs", "sign in", "signin", "directory audit"),
+    )
+
+    def __init__(self, handlers: Any) -> None:
+        self._handlers = handlers
+
+    def tools(self) -> list[ToolDefinition]:
+        return [
+            _tool(
+                "list_sign_in_logs",
+                "List Entra sign-in logs.",
+                LogQueryArgs,
+                self._handlers.list_sign_in_logs,
+                domain=self.metadata.name,
+                tags=("audit", "sign in", "signin", "failed login", "activity"),
+            ),
+            _tool(
+                "list_directory_audits",
+                "List directory audit events.",
+                LogQueryArgs,
+                self._handlers.list_directory_audits,
+                domain=self.metadata.name,
+                tags=("audit", "directory", "activity", "changes"),
+            ),
+        ]
+
+
+class DeviceManagementDomain(GraphDomain):
+    metadata = DomainMetadata(
+        name="devices",
+        display_name="Devices",
+        description="Directory devices and endpoint inventory exposed through Microsoft Graph.",
+        required_permissions=("Device.Read.All", "Directory.Read.All"),
+        tags=("devices", "endpoint", "intune", "compliance"),
+    )
+
+    def __init__(self, handlers: Any) -> None:
+        self._handlers = handlers
+
+    def tools(self) -> list[ToolDefinition]:
+        return [
+            _tool(
+                "list_devices",
+                "List directory devices.",
+                ListDevicesArgs,
+                self._handlers.list_devices,
+                domain=self.metadata.name,
+                tags=("devices", "endpoint", "directory", "read"),
+            ),
+        ]
+
+
+class CatalogOperationDomain(GraphDomain):
+    metadata = DomainMetadata(
+        name="catalog_operations",
+        display_name="Catalog Operations",
+        description="Advanced escape hatch for executing cataloged Microsoft Graph operations by name.",
+        tags=("catalog", "advanced", "generic", "graph operation"),
+    )
+
+    def __init__(self, handlers: Any) -> None:
+        self._handlers = handlers
+
+    def tools(self) -> list[ToolDefinition]:
+        return [
+            _tool(
+                "graph_operation",
+                "Execute a cataloged Microsoft Graph operation by name.",
+                GenericGraphOperationArgs,
+                self._handlers.graph_operation,
+                read_only=False,
+                domain=self.metadata.name,
+                safety="catalog_controlled",
+                tags=("catalog", "advanced", "generic"),
+            ),
+        ]
+
+
 class GraphToolFactory:
     def __init__(self, client: GraphClient, catalog: GraphOperationCatalog) -> None:
         self._client = client
@@ -135,31 +443,14 @@ class GraphToolFactory:
 
     def build_registry(self) -> ToolRegistry:
         registry = ToolRegistry()
-        for tool in [
-            ToolDefinition("resolve_user", "Resolve a user name, mail, UPN, or ID to exact Graph user identifiers.", ResolveUserArgs, self.resolve_user),
-            ToolDefinition("resolve_group", "Resolve a group name, mail nickname, mail, or ID to exact Graph group identifiers.", ResolveGroupArgs, self.resolve_group),
-            ToolDefinition("list_users", "List directory users.", ListUsersArgs, self.list_users),
-            ToolDefinition("get_user", "Get a user by object ID or UPN.", GetUserArgs, self.get_user),
-            ToolDefinition("search_user", "Search users by display name, mail, or UPN.", SearchUserArgs, self.search_user),
-            ToolDefinition("update_user", "Update user properties.", UpdateUserArgs, self.update_user, read_only=False, requires_confirmation=True),
-            ToolDefinition("delete_user", "Delete a user.", DeleteUserArgs, self.delete_user, read_only=False, requires_confirmation=True),
-            ToolDefinition("revoke_user_sessions", "Revoke all sign-in sessions for a user.", RevokeUserSessionsArgs, self.revoke_user_sessions, read_only=False, requires_confirmation=True),
-            ToolDefinition("list_groups", "List Microsoft 365 groups.", ListGroupsArgs, self.list_groups),
-            ToolDefinition("get_group", "Get a group by ID.", GetGroupArgs, self.get_group),
-            ToolDefinition("list_group_members", "List members of a group.", ListGroupMembersArgs, self.list_group_members),
-            ToolDefinition("add_group_member", "Add a directory object to a group.", AddGroupMemberArgs, self.add_group_member, read_only=False, requires_confirmation=True),
-            ToolDefinition("remove_group_member", "Remove a directory object from a group.", RemoveGroupMemberArgs, self.remove_group_member, read_only=False, requires_confirmation=True),
-            ToolDefinition("list_devices", "List directory devices.", ListDevicesArgs, self.list_devices),
-            ToolDefinition("list_sign_in_logs", "List Entra sign-in logs.", LogQueryArgs, self.list_sign_in_logs),
-            ToolDefinition("list_directory_audits", "List directory audit events.", LogQueryArgs, self.list_directory_audits),
-            ToolDefinition("list_security_alerts", "List Microsoft Graph security alerts.", SecurityListArgs, self.list_security_alerts),
-            ToolDefinition("list_security_incidents", "List Microsoft Graph security incidents.", SecurityListArgs, self.list_security_incidents),
-            ToolDefinition("list_service_principals", "List Entra service principals.", ListServicePrincipalsArgs, self.list_service_principals),
-            ToolDefinition("list_oauth_permission_grants", "List OAuth permission grants.", ListOAuthPermissionGrantsArgs, self.list_oauth_permission_grants),
-            ToolDefinition("delete_oauth_permission_grant", "Delete an OAuth permission grant.", DeleteOAuthPermissionGrantArgs, self.delete_oauth_permission_grant, read_only=False, requires_confirmation=True),
-            ToolDefinition("graph_operation", "Execute a cataloged Microsoft Graph operation by name.", GenericGraphOperationArgs, self.graph_operation, read_only=False),
+        for domain in [
+            IdentityAccessDomain(self),
+            SecurityDomain(self),
+            AuditActivityDomain(self),
+            DeviceManagementDomain(self),
+            CatalogOperationDomain(self),
         ]:
-            registry.register(tool)
+            registry.register_domain(domain)
         return registry
 
     async def resolve_user(self, args: ResolveUserArgs) -> Any:
@@ -181,7 +472,9 @@ class GraphToolFactory:
                 "$select": "id,displayName,userPrincipalName,mail",
             },
         )
-        return _single_match_or_result(payload, allow_ambiguous=args.allow_ambiguous, entity_name="user")
+        return _single_match_or_result(
+            payload, allow_ambiguous=args.allow_ambiguous, entity_name="user"
+        )
 
     async def resolve_group(self, args: ResolveGroupArgs) -> Any:
         if _looks_like_object_id(args.query):
@@ -202,7 +495,9 @@ class GraphToolFactory:
                 "$select": "id,displayName,mail,mailNickname",
             },
         )
-        return _single_match_or_result(payload, allow_ambiguous=args.allow_ambiguous, entity_name="group")
+        return _single_match_or_result(
+            payload, allow_ambiguous=args.allow_ambiguous, entity_name="group"
+        )
 
     async def list_users(self, args: ListUsersArgs) -> Any:
         return await self._client.request_collection(
@@ -213,17 +508,23 @@ class GraphToolFactory:
         )
 
     async def get_user(self, args: GetUserArgs) -> Any:
-        return await self._client.request("GET", f"/users/{args.user_id}", params=_select_params(args.select_fields))
+        return await self._client.request(
+            "GET", f"/users/{args.user_id}", params=_select_params(args.select_fields)
+        )
 
     async def search_user(self, args: SearchUserArgs) -> Any:
         escaped = _escape_odata_string(args.query)
         filter_expression = (
             f"displayName eq '{escaped}' or userPrincipalName eq '{escaped}' or mail eq '{escaped}'"
         )
-        return await self._client.request("GET", "/users", params={"$filter": filter_expression, "$top": args.top})
+        return await self._client.request(
+            "GET", "/users", params={"$filter": filter_expression, "$top": args.top}
+        )
 
     async def update_user(self, args: UpdateUserArgs) -> Any:
-        return await self._client.request("PATCH", f"/users/{args.user_id}", json_data=args.update_data)
+        return await self._client.request(
+            "PATCH", f"/users/{args.user_id}", json_data=args.update_data
+        )
 
     async def delete_user(self, args: DeleteUserArgs) -> Any:
         return await self._client.request("DELETE", f"/users/{args.user_id}")
@@ -250,10 +551,14 @@ class GraphToolFactory:
 
     async def add_group_member(self, args: AddGroupMemberArgs) -> Any:
         body = {"@odata.id": f"https://graph.microsoft.com/v1.0/directoryObjects/{args.member_id}"}
-        return await self._client.request("POST", f"/groups/{args.group_id}/members/$ref", json_data=body)
+        return await self._client.request(
+            "POST", f"/groups/{args.group_id}/members/$ref", json_data=body
+        )
 
     async def remove_group_member(self, args: RemoveGroupMemberArgs) -> Any:
-        return await self._client.request("DELETE", f"/groups/{args.group_id}/members/{args.member_id}/$ref")
+        return await self._client.request(
+            "DELETE", f"/groups/{args.group_id}/members/{args.member_id}/$ref"
+        )
 
     async def list_devices(self, args: ListDevicesArgs) -> Any:
         return await self._client.request_collection(
@@ -363,6 +668,33 @@ class GraphToolFactory:
             params=args.query_params,
             api_version=args.api_version or operation.api_version,
         )
+
+
+def _tool(
+    name: str,
+    description: str,
+    args_model: type[BaseModel],
+    handler: Any,
+    *,
+    read_only: bool = True,
+    requires_confirmation: bool = False,
+    domain: str,
+    safety: str = "read_only",
+    required_permissions: tuple[str, ...] = (),
+    tags: tuple[str, ...] = (),
+) -> ToolDefinition:
+    return ToolDefinition(
+        name=name,
+        description=description,
+        args_model=args_model,
+        handler=handler,
+        read_only=read_only,
+        requires_confirmation=requires_confirmation,
+        domain=domain,
+        safety=safety,
+        required_permissions=required_permissions,
+        tags=tags,
+    )
 
 
 def _select_params(select_fields: list[str] | None) -> dict[str, Any]:
