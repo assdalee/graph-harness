@@ -1,3 +1,5 @@
+import uuid
+
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -10,7 +12,7 @@ from graph_harness.app.routes.runs import create_runs_router
 from graph_harness.runs.store import build_run_store
 from graph_harness.core.config import Settings, get_settings
 from graph_harness.core.errors import AppError
-from graph_harness.core.logging import configure_logging
+from graph_harness.core.logging import configure_logging, set_request_id
 from graph_harness.core.security import build_api_key_dependency
 from graph_harness.graph.auth import GraphTokenProvider
 from graph_harness.graph.client import GraphClient
@@ -44,6 +46,34 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+
+    max_request_bytes = settings.max_request_bytes
+
+    @app.middleware("http")
+    async def request_context(request: Request, call_next):
+        request_id = request.headers.get("x-request-id") or uuid.uuid4().hex
+        set_request_id(request_id)
+
+        content_length = request.headers.get("content-length")
+        if content_length is not None:
+            try:
+                declared = int(content_length)
+            except ValueError:
+                declared = 0
+            if declared > max_request_bytes:
+                return JSONResponse(
+                    status_code=413,
+                    content={
+                        "detail": "Request body too large.",
+                        "code": "request_too_large",
+                        "details": {"max_request_bytes": max_request_bytes},
+                    },
+                    headers={"x-request-id": request_id},
+                )
+
+        response = await call_next(request)
+        response.headers["x-request-id"] = request_id
+        return response
 
     catalog = GraphOperationCatalog.default()
     if settings.graph_backend.lower() == "mock":

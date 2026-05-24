@@ -1,5 +1,6 @@
 import json
 import logging
+import time
 from typing import Any
 
 from graph_harness.agent.clarification import ClarificationPolicy
@@ -47,6 +48,8 @@ class GraphAgent:
         state = AgentRunState(messages=self._initial_messages(messages))
         answer = ""
         tool_call_counts: dict[str, int] = {}
+        budget = self._settings.agent_max_wall_clock_seconds
+        deadline = time.monotonic() + budget if budget > 0 else None
         self._trace(
             state,
             "run_started",
@@ -57,6 +60,18 @@ class GraphAgent:
 
         for turn in range(self._settings.agent_max_turns):
             state.turn = turn + 1
+            if deadline is not None and time.monotonic() >= deadline:
+                state.warnings.append(
+                    f"Agent wall-clock budget of {budget:g}s exceeded; finalizing early."
+                )
+                self._trace(
+                    state,
+                    "deadline_exceeded",
+                    "Agent wall-clock budget exceeded.",
+                    budget_seconds=budget,
+                )
+                answer = await self._finalize_or_fallback(state, "deadline_exceeded")
+                break
             self._trace(state, "turn_started", "Agent turn started.")
             selected_tools = self._select_tools_for_turn(state)
             response = await self._safe_complete(

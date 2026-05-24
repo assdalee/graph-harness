@@ -22,10 +22,9 @@ class ContextCompactor:
 
         system_messages = [message for message in messages if message.get("role") == "system"]
         first_user = next((message for message in messages if message.get("role") == "user"), None)
-        recent = messages[-self._settings.agent_context_recent_messages :]
-        recent_ids = {id(message) for message in recent}
-
-        omitted = [message for message in messages if id(message) not in recent_ids]
+        split = len(messages) - self._settings.agent_context_recent_messages
+        omitted = messages[:split]
+        recent = messages[split:]
         summary = self._build_summary(omitted)
 
         compacted: list[dict[str, Any]] = []
