@@ -9,6 +9,8 @@ class Settings(BaseModel):
     app_name: str = "GraphHarness"
     app_env: str = "local"
     api_key_name: str = "x-api-key"
+    # Gates the HTTP API (the x-api-key header) — NOT an LLM provider credential.
+    # Preferred env var: API_GATEWAY_KEY (legacy alias: LLM_API_KEY).
     llm_api_key: str | None = None
 
     cors_allow_origins: list[str] = Field(default_factory=lambda: ["*"])
@@ -17,6 +19,8 @@ class Settings(BaseModel):
     llm_model: str = "openai/gpt-4o-mini"
     llm_backend: str = "litellm"
     llm_fake_scenarios_path: str | None = None
+    # The upstream LLM provider API key passed to LiteLLM.
+    # Preferred env var: LLM_PROVIDER_API_KEY (legacy alias: LLM_API_KEY_PROVIDER).
     llm_api_key_provider: str | None = None
     openrouter_api_key: str | None = None
     litellm_api_base: str | None = None
@@ -106,6 +110,16 @@ class Settings(BaseModel):
     def clamp_domain_tool_selection_max_tools(cls, value: int) -> int:
         return max(3, min(value, 50))
 
+    @property
+    def api_gateway_key(self) -> str | None:
+        """Clear alias for the HTTP API gateway key (see ``llm_api_key``)."""
+        return self.llm_api_key
+
+    @property
+    def llm_provider_api_key(self) -> str | None:
+        """Clear alias for the upstream LLM provider key (see ``llm_api_key_provider``)."""
+        return self.llm_api_key_provider
+
     @classmethod
     def from_env(cls) -> "Settings":
         load_dotenv(override=False)
@@ -113,13 +127,14 @@ class Settings(BaseModel):
             app_name=_get_str("APP_NAME", cls.model_fields["app_name"].default),
             app_env=_get_str("APP_ENV", cls.model_fields["app_env"].default),
             api_key_name=_get_str("API_KEY_NAME", cls.model_fields["api_key_name"].default),
-            llm_api_key=_get_optional_str("LLM_API_KEY"),
+            llm_api_key=_get_optional_str("API_GATEWAY_KEY") or _get_optional_str("LLM_API_KEY"),
             cors_allow_origins=_get_str("CORS_ALLOW_ORIGINS", "*"),
             cors_allow_credentials=_get_bool("CORS_ALLOW_CREDENTIALS", False),
             llm_model=_get_str("LLM_MODEL", cls.model_fields["llm_model"].default),
             llm_backend=_get_str("LLM_BACKEND", cls.model_fields["llm_backend"].default),
             llm_fake_scenarios_path=_get_optional_str("LLM_FAKE_SCENARIOS_PATH"),
-            llm_api_key_provider=_get_optional_str("LLM_API_KEY_PROVIDER"),
+            llm_api_key_provider=_get_optional_str("LLM_PROVIDER_API_KEY")
+            or _get_optional_str("LLM_API_KEY_PROVIDER"),
             openrouter_api_key=_get_optional_str("OPENROUTER_API_KEY"),
             litellm_api_base=_get_optional_str("LITELLM_API_BASE"),
             litellm_temperature=_get_float("LITELLM_TEMPERATURE", 0),
