@@ -1,9 +1,10 @@
 import uuid
+from collections.abc import Callable
 from datetime import datetime, timezone
 
 from graph_harness.agent.agent import GraphAgent
 from graph_harness.agent.policies import normalize_inbound_messages
-from graph_harness.api_models.chat import ChatRequest, ChatResponse
+from graph_harness.api_models.chat import AgentTraceEvent, ChatRequest, ChatResponse
 from graph_harness.core.config import Settings
 from graph_harness.runs.store import NullRunStore, RunRecord, RunStore
 
@@ -20,13 +21,20 @@ class ChatService:
         self._run_store = run_store or NullRunStore()
         self._settings = settings
 
-    async def chat(self, request: ChatRequest) -> ChatResponse:
+    async def chat(
+        self,
+        request: ChatRequest,
+        *,
+        on_event: Callable[[AgentTraceEvent], None] | None = None,
+    ) -> ChatResponse:
         normalized = request.normalized_input()
         messages = normalize_inbound_messages(normalized.messages)
         thread_id = normalized.thread_id or normalized.user_id
 
         started_at = datetime.now(timezone.utc)
-        response = await self._agent.run(messages=messages, thread_id=thread_id)
+        response = await self._agent.run(
+            messages=messages, thread_id=thread_id, on_event=on_event
+        )
         finished_at = datetime.now(timezone.utc)
 
         if isinstance(self._run_store, NullRunStore):

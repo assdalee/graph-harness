@@ -75,6 +75,11 @@ class ChatResponse(BaseModel):
     trace_events: list[AgentTraceEvent] = Field(default_factory=list)
 
 
+class StreamTraceEvent(BaseModel):
+    event: Literal["trace"]
+    data: AgentTraceEvent
+
+
 class StreamResultEvent(BaseModel):
     event: Literal["result"]
     data: ChatResponse

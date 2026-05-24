@@ -1,6 +1,7 @@
 import json
 import logging
 import time
+from collections.abc import Callable
 from typing import Any
 
 from graph_harness.agent.clarification import ClarificationPolicy
@@ -43,9 +44,13 @@ class GraphAgent:
         self._context_compactor = ContextCompactor(settings)
 
     async def run(
-        self, *, messages: list[dict[str, Any]], thread_id: str | None = None
+        self,
+        *,
+        messages: list[dict[str, Any]],
+        thread_id: str | None = None,
+        on_event: Callable[[AgentTraceEvent], None] | None = None,
     ) -> ChatResponse:
-        state = AgentRunState(messages=self._initial_messages(messages))
+        state = AgentRunState(messages=self._initial_messages(messages), on_event=on_event)
         answer = ""
         tool_call_counts: dict[str, int] = {}
         budget = self._settings.agent_max_wall_clock_seconds
@@ -435,6 +440,11 @@ class GraphAgent:
             metadata=metadata,
         )
         state.trace_events.append(trace_event)
+        if state.on_event is not None:
+            try:
+                state.on_event(trace_event)
+            except Exception:  # a stream consumer must never break the run
+                logger.debug("on_event callback raised; ignoring", exc_info=True)
         if self._settings.agent_log_trace_events:
             logger.info(
                 "agent_trace %s",
