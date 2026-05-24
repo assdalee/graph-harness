@@ -33,10 +33,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         version="0.1.0",
         description="Production-oriented AI agent harness for Microsoft Graph.",
     )
+    allow_origins = settings.cors_allow_origins or ["*"]
+    # The CORS spec forbids credentialed requests against a wildcard origin, and
+    # browsers reject the combination. Only enable credentials for explicit origins.
+    allow_credentials = settings.cors_allow_credentials and "*" not in allow_origins
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["*"],
-        allow_credentials=True,
+        allow_origins=allow_origins,
+        allow_credentials=allow_credentials,
         allow_methods=["*"],
         allow_headers=["*"],
     )

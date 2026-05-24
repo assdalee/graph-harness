@@ -1,3 +1,5 @@
+import secrets
+
 from fastapi import HTTPException, Security
 from fastapi.security import APIKeyHeader
 
@@ -12,7 +14,7 @@ def build_api_key_dependency(settings: Settings):
             return True
         if not api_key:
             raise HTTPException(status_code=401, detail="API key is missing")
-        if api_key != settings.llm_api_key:
+        if not secrets.compare_digest(api_key, settings.llm_api_key):
             raise HTTPException(status_code=403, detail="Invalid API key")
         return True
 

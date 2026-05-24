@@ -11,6 +11,9 @@ class Settings(BaseModel):
     api_key_name: str = "x-api-key"
     llm_api_key: str | None = None
 
+    cors_allow_origins: list[str] = Field(default_factory=lambda: ["*"])
+    cors_allow_credentials: bool = False
+
     llm_model: str = "openai/gpt-4o-mini"
     llm_backend: str = "litellm"
     llm_fake_scenarios_path: str | None = None
@@ -51,9 +54,9 @@ class Settings(BaseModel):
     runs_backend: str = "sqlite"
     runs_db_path: str = "./data/runs.sqlite3"
 
-    @field_validator("graph_scopes", mode="before")
+    @field_validator("graph_scopes", "cors_allow_origins", mode="before")
     @classmethod
-    def split_graph_scopes(cls, value: str | list[str]) -> list[str]:
+    def split_csv(cls, value: str | list[str]) -> list[str]:
         if isinstance(value, str):
             return [part.strip() for part in value.split(",") if part.strip()]
         return value
@@ -111,6 +114,8 @@ class Settings(BaseModel):
             app_env=_get_str("APP_ENV", cls.model_fields["app_env"].default),
             api_key_name=_get_str("API_KEY_NAME", cls.model_fields["api_key_name"].default),
             llm_api_key=_get_optional_str("LLM_API_KEY"),
+            cors_allow_origins=_get_str("CORS_ALLOW_ORIGINS", "*"),
+            cors_allow_credentials=_get_bool("CORS_ALLOW_CREDENTIALS", False),
             llm_model=_get_str("LLM_MODEL", cls.model_fields["llm_model"].default),
             llm_backend=_get_str("LLM_BACKEND", cls.model_fields["llm_backend"].default),
             llm_fake_scenarios_path=_get_optional_str("LLM_FAKE_SCENARIOS_PATH"),
