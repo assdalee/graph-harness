@@ -1,4 +1,5 @@
 import uuid
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -30,10 +31,18 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     configure_logging()
     settings = settings or get_settings()
 
+    @asynccontextmanager
+    async def lifespan(app: FastAPI):
+        yield
+        client = getattr(app.state, "graph_client", None)
+        if client is not None and hasattr(client, "aclose"):
+            await client.aclose()
+
     app = FastAPI(
         title=settings.app_name,
         version="0.1.0",
         description="Production-oriented AI agent harness for Microsoft Graph.",
+        lifespan=lifespan,
     )
     allow_origins = settings.cors_allow_origins or ["*"]
     # The CORS spec forbids credentialed requests against a wildcard origin, and
@@ -98,6 +107,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     run_store = build_run_store(settings)
 
     app.state.settings = settings
+    app.state.graph_client = graph_client
     app.state.graph_operation_catalog = catalog
     app.state.tool_registry = registry
     app.state.run_store = run_store

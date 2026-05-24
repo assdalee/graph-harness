@@ -9,13 +9,28 @@ from graph_harness.graph.auth import GraphTokenProvider
 
 
 class GraphClient:
-    """Low-level async Microsoft Graph HTTP client."""
+    """Low-level async Microsoft Graph HTTP client.
+
+    A single ``httpx.AsyncClient`` is reused across requests for connection
+    pooling. Call :meth:`aclose` on application shutdown.
+    """
 
     _retry_statuses = {429, 500, 502, 503, 504}
 
     def __init__(self, settings: Settings, token_provider: GraphTokenProvider) -> None:
         self._settings = settings
         self._token_provider = token_provider
+        self._client: httpx.AsyncClient | None = None
+
+    def _http_client(self) -> httpx.AsyncClient:
+        if self._client is None or self._client.is_closed:
+            self._client = httpx.AsyncClient(timeout=self._settings.graph_timeout_seconds)
+        return self._client
+
+    async def aclose(self) -> None:
+        if self._client is not None and not self._client.is_closed:
+            await self._client.aclose()
+        self._client = None
 
     async def request(
         self,
@@ -39,14 +54,13 @@ class GraphClient:
             }
 
             try:
-                async with httpx.AsyncClient(timeout=self._settings.graph_timeout_seconds) as client:
-                    response = await client.request(
-                        method.upper(),
-                        url,
-                        headers=headers,
-                        json=json_data,
-                        params=params,
-                    )
+                response = await self._http_client().request(
+                    method.upper(),
+                    url,
+                    headers=headers,
+                    json=json_data,
+                    params=params,
+                )
             except httpx.TransportError as exc:
                 last_error = exc
                 await asyncio.sleep(1.5 * (2**attempt))
@@ -121,8 +135,7 @@ class GraphClient:
             "Authorization": f"Bearer {token}",
             "Content-Type": "application/json",
         }
-        async with httpx.AsyncClient(timeout=self._settings.graph_timeout_seconds) as client:
-            response = await client.get(url, headers=headers)
+        response = await self._http_client().get(url, headers=headers)
         try:
             payload = response.json()
         except ValueError:
