@@ -9,13 +9,28 @@ from graph_harness.graph.auth import GraphTokenProvider
 
 
 class GraphClient:
-    """Low-level async Microsoft Graph HTTP client."""
+    """Low-level async Microsoft Graph HTTP client.
+
+    A single ``httpx.AsyncClient`` is reused across requests for connection
+    pooling. Call :meth:`aclose` on application shutdown.
+    """
 
     _retry_statuses = {429, 500, 502, 503, 504}
 
     def __init__(self, settings: Settings, token_provider: GraphTokenProvider) -> None:
         self._settings = settings
         self._token_provider = token_provider
+        self._client: httpx.AsyncClient | None = None
+
+    def _http_client(self) -> httpx.AsyncClient:
+        if self._client is None or self._client.is_closed:
+            self._client = httpx.AsyncClient(timeout=self._settings.graph_timeout_seconds)
+        return self._client
+
+    async def aclose(self) -> None:
+        if self._client is not None and not self._client.is_closed:
+            await self._client.aclose()
+        self._client = None
 
     async def request(
         self,
@@ -25,6 +40,7 @@ class GraphClient:
         json_data: dict[str, Any] | None = None,
         params: dict[str, Any] | None = None,
         api_version: str | None = None,
+        advanced_query: bool = False,
     ) -> Any:
         clean_endpoint = endpoint if endpoint.startswith("/") else f"/{endpoint}"
         version = api_version or self._settings.graph_default_api_version
@@ -37,16 +53,20 @@ class GraphClient:
                 "Authorization": f"Bearer {token}",
                 "Content-Type": "application/json",
             }
+            if advanced_query:
+                # Required by Graph for advanced query capabilities such as
+                # $search, $count, and $filter operators like startsWith/ne/not
+                # on directory objects.
+                headers["ConsistencyLevel"] = "eventual"
 
             try:
-                async with httpx.AsyncClient(timeout=self._settings.graph_timeout_seconds) as client:
-                    response = await client.request(
-                        method.upper(),
-                        url,
-                        headers=headers,
-                        json=json_data,
-                        params=params,
-                    )
+                response = await self._http_client().request(
+                    method.upper(),
+                    url,
+                    headers=headers,
+                    json=json_data,
+                    params=params,
+                )
             except httpx.TransportError as exc:
                 last_error = exc
                 await asyncio.sleep(1.5 * (2**attempt))
@@ -89,8 +109,11 @@ class GraphClient:
         api_version: str | None = None,
         all_pages: bool = False,
         max_pages: int = 1,
+        advanced_query: bool = False,
     ) -> Any:
-        first_page = await self.request("GET", endpoint, params=params, api_version=api_version)
+        first_page = await self.request(
+            "GET", endpoint, params=params, api_version=api_version, advanced_query=advanced_query
+        )
         if not all_pages or not isinstance(first_page, dict) or "error" in first_page:
             return first_page
 
@@ -100,7 +123,7 @@ class GraphClient:
         pages_read = 1
 
         while next_link and pages_read < max_pages:
-            page = await self._request_absolute_url(next_link)
+            page = await self._request_absolute_url(next_link, advanced_query=advanced_query)
             pages_read += 1
             if not isinstance(page, dict) or "error" in page:
                 return page
@@ -115,14 +138,15 @@ class GraphClient:
         merged["@agent.pagesRead"] = pages_read
         return merged
 
-    async def _request_absolute_url(self, url: str) -> Any:
+    async def _request_absolute_url(self, url: str, *, advanced_query: bool = False) -> Any:
         token = await asyncio.to_thread(self._token_provider.get_token)
         headers = {
             "Authorization": f"Bearer {token}",
             "Content-Type": "application/json",
         }
-        async with httpx.AsyncClient(timeout=self._settings.graph_timeout_seconds) as client:
-            response = await client.get(url, headers=headers)
+        if advanced_query:
+            headers["ConsistencyLevel"] = "eventual"
+        response = await self._http_client().get(url, headers=headers)
         try:
             payload = response.json()
         except ValueError:

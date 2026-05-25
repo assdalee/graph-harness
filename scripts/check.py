@@ -28,6 +28,7 @@ def main() -> int:
     python = sys.executable
     steps = [
         ("compile", [python, "-m", "compileall", "src", "tests", "scripts"]),
+        ("lint", [python, "-m", "ruff", "check", "src", "tests", "scripts"]),
         ("unit tests", [python, "-m", "pytest", "-q"]),
         ("frontend dependencies", ["npm", "ci", "--prefix", "frontend"]),
         ("frontend build", ["npm", "run", "build", "--prefix", "frontend"]),

@@ -1,5 +1,7 @@
 import json
 import logging
+import time
+from collections.abc import Callable
 from typing import Any
 
 from graph_harness.agent.clarification import ClarificationPolicy
@@ -42,11 +44,17 @@ class GraphAgent:
         self._context_compactor = ContextCompactor(settings)
 
     async def run(
-        self, *, messages: list[dict[str, Any]], thread_id: str | None = None
+        self,
+        *,
+        messages: list[dict[str, Any]],
+        thread_id: str | None = None,
+        on_event: Callable[[AgentTraceEvent], None] | None = None,
     ) -> ChatResponse:
-        state = AgentRunState(messages=self._initial_messages(messages))
+        state = AgentRunState(messages=self._initial_messages(messages), on_event=on_event)
         answer = ""
         tool_call_counts: dict[str, int] = {}
+        budget = self._settings.agent_max_wall_clock_seconds
+        deadline = time.monotonic() + budget if budget > 0 else None
         self._trace(
             state,
             "run_started",
@@ -57,6 +65,18 @@ class GraphAgent:
 
         for turn in range(self._settings.agent_max_turns):
             state.turn = turn + 1
+            if deadline is not None and time.monotonic() >= deadline:
+                state.warnings.append(
+                    f"Agent wall-clock budget of {budget:g}s exceeded; finalizing early."
+                )
+                self._trace(
+                    state,
+                    "deadline_exceeded",
+                    "Agent wall-clock budget exceeded.",
+                    budget_seconds=budget,
+                )
+                answer = await self._finalize_or_fallback(state, "deadline_exceeded")
+                break
             self._trace(state, "turn_started", "Agent turn started.")
             selected_tools = self._select_tools_for_turn(state)
             response = await self._safe_complete(
@@ -420,6 +440,11 @@ class GraphAgent:
             metadata=metadata,
         )
         state.trace_events.append(trace_event)
+        if state.on_event is not None:
+            try:
+                state.on_event(trace_event)
+            except Exception:  # a stream consumer must never break the run
+                logger.debug("on_event callback raised; ignoring", exc_info=True)
         if self._settings.agent_log_trace_events:
             logger.info(
                 "agent_trace %s",

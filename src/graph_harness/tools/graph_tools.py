@@ -67,7 +67,7 @@ class GetGroupArgs(BaseModel):
     group_id: str
 
 
-class ListGroupMembersArgs(BaseModel):
+class ListGroupMembersArgs(PaginationArgs):
     group_id: str
     select_fields: list[str] | None = None
     top: int | None = Field(default=50, ge=1, le=999)
@@ -88,6 +88,11 @@ class ListDevicesArgs(PaginationArgs):
     filter_expression: str | None = None
 
 
+class GetDeviceArgs(BaseModel):
+    device_id: str = Field(description="Directory device object ID.")
+    select_fields: list[str] | None = None
+
+
 class LogQueryArgs(PaginationArgs):
     user_principal_name: str | None = None
     created_after: datetime | None = None
@@ -106,6 +111,27 @@ class SecurityListArgs(PaginationArgs):
     assigned_to: str | None = None
     filter_expression: str | None = None
     count: bool | None = None
+
+
+AlertClassification = Literal[
+    "unknown", "falsePositive", "truePositive", "informationalExpectedActivity"
+]
+
+
+class GetSecurityAlertArgs(BaseModel):
+    alert_id: str = Field(description="Microsoft Graph security alert (alerts_v2) ID.")
+
+
+class GetSecurityIncidentArgs(BaseModel):
+    incident_id: str = Field(description="Microsoft Graph security incident ID.")
+
+
+class UpdateSecurityAlertArgs(ConfirmableArgs):
+    alert_id: str
+    status: SecurityStatus | None = None
+    assigned_to: str | None = None
+    classification: AlertClassification | None = None
+    determination: str | None = None
 
 
 class ListServicePrincipalsArgs(PaginationArgs):
@@ -324,7 +350,11 @@ class SecurityDomain(GraphDomain):
         name="security",
         display_name="Security",
         description="Microsoft Graph security alerts, incidents, and security investigation data.",
-        required_permissions=("SecurityEvents.Read.All", "SecurityIncident.Read.All"),
+        required_permissions=(
+            "SecurityAlert.Read.All",
+            "SecurityAlert.ReadWrite.All",
+            "SecurityIncident.Read.All",
+        ),
         tags=("security", "defender", "alerts", "incidents", "risk"),
     )
 
@@ -342,12 +372,39 @@ class SecurityDomain(GraphDomain):
                 tags=("security", "alerts", "defender", "severity"),
             ),
             _tool(
+                "get_security_alert",
+                "Get a single Microsoft Graph security alert by ID.",
+                GetSecurityAlertArgs,
+                self._handlers.get_security_alert,
+                domain=self.metadata.name,
+                tags=("security", "alert", "defender", "investigation"),
+            ),
+            _tool(
+                "update_security_alert",
+                "Triage a security alert (status, assignee, classification, determination).",
+                UpdateSecurityAlertArgs,
+                self._handlers.update_security_alert,
+                read_only=False,
+                requires_confirmation=True,
+                domain=self.metadata.name,
+                safety="security_mutation",
+                tags=("security", "alert", "triage", "mutation"),
+            ),
+            _tool(
                 "list_security_incidents",
                 "List Microsoft Graph security incidents.",
                 SecurityListArgs,
                 self._handlers.list_security_incidents,
                 domain=self.metadata.name,
                 tags=("security", "incidents", "defender", "investigation"),
+            ),
+            _tool(
+                "get_security_incident",
+                "Get a single Microsoft Graph security incident by ID.",
+                GetSecurityIncidentArgs,
+                self._handlers.get_security_incident,
+                domain=self.metadata.name,
+                tags=("security", "incident", "defender", "investigation"),
             ),
         ]
 
@@ -385,13 +442,17 @@ class AuditActivityDomain(GraphDomain):
         ]
 
 
-class DeviceManagementDomain(GraphDomain):
+class DirectoryDeviceDomain(GraphDomain):
     metadata = DomainMetadata(
         name="devices",
-        display_name="Devices",
-        description="Directory devices and endpoint inventory exposed through Microsoft Graph.",
+        display_name="Directory Devices",
+        description=(
+            "Microsoft Entra directory device objects (registered and joined devices). "
+            "This is directory inventory only; it does not include Intune managed-device "
+            "or device-compliance data, which live under a separate Graph surface."
+        ),
         required_permissions=("Device.Read.All", "Directory.Read.All"),
-        tags=("devices", "endpoint", "intune", "compliance"),
+        tags=("devices", "endpoint", "entra", "directory", "registered", "joined"),
     )
 
     def __init__(self, handlers: Any) -> None:
@@ -401,11 +462,19 @@ class DeviceManagementDomain(GraphDomain):
         return [
             _tool(
                 "list_devices",
-                "List directory devices.",
+                "List Microsoft Entra directory devices.",
                 ListDevicesArgs,
                 self._handlers.list_devices,
                 domain=self.metadata.name,
                 tags=("devices", "endpoint", "directory", "read"),
+            ),
+            _tool(
+                "get_device",
+                "Get a Microsoft Entra directory device by object ID.",
+                GetDeviceArgs,
+                self._handlers.get_device,
+                domain=self.metadata.name,
+                tags=("device", "directory", "read"),
             ),
         ]
 
@@ -447,7 +516,7 @@ class GraphToolFactory:
             IdentityAccessDomain(self),
             SecurityDomain(self),
             AuditActivityDomain(self),
-            DeviceManagementDomain(self),
+            DirectoryDeviceDomain(self),
             CatalogOperationDomain(self),
         ]:
             registry.register_domain(domain)
@@ -515,10 +584,15 @@ class GraphToolFactory:
     async def search_user(self, args: SearchUserArgs) -> Any:
         escaped = _escape_odata_string(args.query)
         filter_expression = (
-            f"displayName eq '{escaped}' or userPrincipalName eq '{escaped}' or mail eq '{escaped}'"
+            f"startswith(displayName,'{escaped}') "
+            f"or startswith(userPrincipalName,'{escaped}') "
+            f"or startswith(mail,'{escaped}')"
         )
         return await self._client.request(
-            "GET", "/users", params={"$filter": filter_expression, "$top": args.top}
+            "GET",
+            "/users",
+            params={"$filter": filter_expression, "$top": args.top},
+            advanced_query=True,
         )
 
     async def update_user(self, args: UpdateUserArgs) -> Any:
@@ -547,7 +621,12 @@ class GraphToolFactory:
         params = _select_params(args.select_fields)
         if args.top:
             params["$top"] = args.top
-        return await self._client.request("GET", f"/groups/{args.group_id}/members", params=params)
+        return await self._client.request_collection(
+            f"/groups/{args.group_id}/members",
+            params=params,
+            all_pages=args.all_pages,
+            max_pages=args.max_pages,
+        )
 
     async def add_group_member(self, args: AddGroupMemberArgs) -> Any:
         body = {"@odata.id": f"https://graph.microsoft.com/v1.0/directoryObjects/{args.member_id}"}
@@ -566,6 +645,11 @@ class GraphToolFactory:
             params=_odata_params(args),
             all_pages=args.all_pages,
             max_pages=args.max_pages,
+        )
+
+    async def get_device(self, args: GetDeviceArgs) -> Any:
+        return await self._client.request(
+            "GET", f"/devices/{args.device_id}", params=_select_params(args.select_fields)
         )
 
     async def list_sign_in_logs(self, args: LogQueryArgs) -> Any:
@@ -597,6 +681,29 @@ class GraphToolFactory:
             max_pages=args.max_pages,
         )
 
+    async def get_security_alert(self, args: GetSecurityAlertArgs) -> Any:
+        return await self._client.request("GET", f"/security/alerts_v2/{args.alert_id}")
+
+    async def update_security_alert(self, args: UpdateSecurityAlertArgs) -> Any:
+        body: dict[str, Any] = {}
+        if args.status is not None:
+            body["status"] = args.status
+        if args.assigned_to is not None:
+            body["assignedTo"] = args.assigned_to
+        if args.classification is not None:
+            body["classification"] = args.classification
+        if args.determination is not None:
+            body["determination"] = args.determination
+        if not body:
+            return ToolResult.failure(
+                "validation_error",
+                "Provide at least one field to update (status, assigned_to, classification, "
+                "or determination).",
+            )
+        return await self._client.request(
+            "PATCH", f"/security/alerts_v2/{args.alert_id}", json_data=body
+        )
+
     async def list_security_incidents(self, args: SecurityListArgs) -> Any:
         return await self._client.request_collection(
             "/security/incidents",
@@ -604,6 +711,9 @@ class GraphToolFactory:
             all_pages=args.all_pages,
             max_pages=args.max_pages,
         )
+
+    async def get_security_incident(self, args: GetSecurityIncidentArgs) -> Any:
+        return await self._client.request("GET", f"/security/incidents/{args.incident_id}")
 
     async def list_service_principals(self, args: ListServicePrincipalsArgs) -> Any:
         filters: list[str] = []
@@ -647,20 +757,28 @@ class GraphToolFactory:
     async def graph_operation(self, args: GenericGraphOperationArgs) -> Any:
         operation = self._catalog.get(args.operation_name)
         if operation is None:
-            return {"error": {"message": f"Unknown operation '{args.operation_name}'."}}
+            return ToolResult.failure(
+                "validation_error",
+                f"Unknown operation '{args.operation_name}'.",
+                details={"operation_name": args.operation_name},
+            )
         if not operation.read_only and not args.confirmed:
-            return {
-                "error": {
-                    "message": (
-                        f"Operation '{args.operation_name}' mutates Microsoft Graph data "
-                        "and requires confirmed=true."
-                    )
-                }
-            }
+            return ToolResult.failure(
+                "confirmation_required",
+                (
+                    f"Operation '{args.operation_name}' mutates Microsoft Graph data "
+                    "and requires confirmed=true before execution."
+                ),
+                details={"operation_name": args.operation_name},
+            )
         try:
             endpoint = operation.endpoint.format(**args.path_params)
         except KeyError as exc:
-            return {"error": {"message": f"Missing path parameter: {exc.args[0]}."}}
+            return ToolResult.failure(
+                "validation_error",
+                f"Missing path parameter: {exc.args[0]}.",
+                details={"missing_param": exc.args[0]},
+            )
         return await self._client.request(
             operation.method,
             endpoint,
