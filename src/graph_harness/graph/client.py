@@ -40,6 +40,7 @@ class GraphClient:
         json_data: dict[str, Any] | None = None,
         params: dict[str, Any] | None = None,
         api_version: str | None = None,
+        advanced_query: bool = False,
     ) -> Any:
         clean_endpoint = endpoint if endpoint.startswith("/") else f"/{endpoint}"
         version = api_version or self._settings.graph_default_api_version
@@ -52,6 +53,11 @@ class GraphClient:
                 "Authorization": f"Bearer {token}",
                 "Content-Type": "application/json",
             }
+            if advanced_query:
+                # Required by Graph for advanced query capabilities such as
+                # $search, $count, and $filter operators like startsWith/ne/not
+                # on directory objects.
+                headers["ConsistencyLevel"] = "eventual"
 
             try:
                 response = await self._http_client().request(
@@ -103,8 +109,11 @@ class GraphClient:
         api_version: str | None = None,
         all_pages: bool = False,
         max_pages: int = 1,
+        advanced_query: bool = False,
     ) -> Any:
-        first_page = await self.request("GET", endpoint, params=params, api_version=api_version)
+        first_page = await self.request(
+            "GET", endpoint, params=params, api_version=api_version, advanced_query=advanced_query
+        )
         if not all_pages or not isinstance(first_page, dict) or "error" in first_page:
             return first_page
 
@@ -114,7 +123,7 @@ class GraphClient:
         pages_read = 1
 
         while next_link and pages_read < max_pages:
-            page = await self._request_absolute_url(next_link)
+            page = await self._request_absolute_url(next_link, advanced_query=advanced_query)
             pages_read += 1
             if not isinstance(page, dict) or "error" in page:
                 return page
@@ -129,12 +138,14 @@ class GraphClient:
         merged["@agent.pagesRead"] = pages_read
         return merged
 
-    async def _request_absolute_url(self, url: str) -> Any:
+    async def _request_absolute_url(self, url: str, *, advanced_query: bool = False) -> Any:
         token = await asyncio.to_thread(self._token_provider.get_token)
         headers = {
             "Authorization": f"Bearer {token}",
             "Content-Type": "application/json",
         }
+        if advanced_query:
+            headers["ConsistencyLevel"] = "eventual"
         response = await self._http_client().get(url, headers=headers)
         try:
             payload = response.json()
