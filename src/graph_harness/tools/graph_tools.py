@@ -67,7 +67,7 @@ class GetGroupArgs(BaseModel):
     group_id: str
 
 
-class ListGroupMembersArgs(BaseModel):
+class ListGroupMembersArgs(PaginationArgs):
     group_id: str
     select_fields: list[str] | None = None
     top: int | None = Field(default=50, ge=1, le=999)
@@ -111,6 +111,27 @@ class SecurityListArgs(PaginationArgs):
     assigned_to: str | None = None
     filter_expression: str | None = None
     count: bool | None = None
+
+
+AlertClassification = Literal[
+    "unknown", "falsePositive", "truePositive", "informationalExpectedActivity"
+]
+
+
+class GetSecurityAlertArgs(BaseModel):
+    alert_id: str = Field(description="Microsoft Graph security alert (alerts_v2) ID.")
+
+
+class GetSecurityIncidentArgs(BaseModel):
+    incident_id: str = Field(description="Microsoft Graph security incident ID.")
+
+
+class UpdateSecurityAlertArgs(ConfirmableArgs):
+    alert_id: str
+    status: SecurityStatus | None = None
+    assigned_to: str | None = None
+    classification: AlertClassification | None = None
+    determination: str | None = None
 
 
 class ListServicePrincipalsArgs(PaginationArgs):
@@ -329,7 +350,11 @@ class SecurityDomain(GraphDomain):
         name="security",
         display_name="Security",
         description="Microsoft Graph security alerts, incidents, and security investigation data.",
-        required_permissions=("SecurityEvents.Read.All", "SecurityIncident.Read.All"),
+        required_permissions=(
+            "SecurityAlert.Read.All",
+            "SecurityAlert.ReadWrite.All",
+            "SecurityIncident.Read.All",
+        ),
         tags=("security", "defender", "alerts", "incidents", "risk"),
     )
 
@@ -347,12 +372,39 @@ class SecurityDomain(GraphDomain):
                 tags=("security", "alerts", "defender", "severity"),
             ),
             _tool(
+                "get_security_alert",
+                "Get a single Microsoft Graph security alert by ID.",
+                GetSecurityAlertArgs,
+                self._handlers.get_security_alert,
+                domain=self.metadata.name,
+                tags=("security", "alert", "defender", "investigation"),
+            ),
+            _tool(
+                "update_security_alert",
+                "Triage a security alert (status, assignee, classification, determination).",
+                UpdateSecurityAlertArgs,
+                self._handlers.update_security_alert,
+                read_only=False,
+                requires_confirmation=True,
+                domain=self.metadata.name,
+                safety="security_mutation",
+                tags=("security", "alert", "triage", "mutation"),
+            ),
+            _tool(
                 "list_security_incidents",
                 "List Microsoft Graph security incidents.",
                 SecurityListArgs,
                 self._handlers.list_security_incidents,
                 domain=self.metadata.name,
                 tags=("security", "incidents", "defender", "investigation"),
+            ),
+            _tool(
+                "get_security_incident",
+                "Get a single Microsoft Graph security incident by ID.",
+                GetSecurityIncidentArgs,
+                self._handlers.get_security_incident,
+                domain=self.metadata.name,
+                tags=("security", "incident", "defender", "investigation"),
             ),
         ]
 
@@ -569,7 +621,12 @@ class GraphToolFactory:
         params = _select_params(args.select_fields)
         if args.top:
             params["$top"] = args.top
-        return await self._client.request("GET", f"/groups/{args.group_id}/members", params=params)
+        return await self._client.request_collection(
+            f"/groups/{args.group_id}/members",
+            params=params,
+            all_pages=args.all_pages,
+            max_pages=args.max_pages,
+        )
 
     async def add_group_member(self, args: AddGroupMemberArgs) -> Any:
         body = {"@odata.id": f"https://graph.microsoft.com/v1.0/directoryObjects/{args.member_id}"}
@@ -624,6 +681,29 @@ class GraphToolFactory:
             max_pages=args.max_pages,
         )
 
+    async def get_security_alert(self, args: GetSecurityAlertArgs) -> Any:
+        return await self._client.request("GET", f"/security/alerts_v2/{args.alert_id}")
+
+    async def update_security_alert(self, args: UpdateSecurityAlertArgs) -> Any:
+        body: dict[str, Any] = {}
+        if args.status is not None:
+            body["status"] = args.status
+        if args.assigned_to is not None:
+            body["assignedTo"] = args.assigned_to
+        if args.classification is not None:
+            body["classification"] = args.classification
+        if args.determination is not None:
+            body["determination"] = args.determination
+        if not body:
+            return ToolResult.failure(
+                "validation_error",
+                "Provide at least one field to update (status, assigned_to, classification, "
+                "or determination).",
+            )
+        return await self._client.request(
+            "PATCH", f"/security/alerts_v2/{args.alert_id}", json_data=body
+        )
+
     async def list_security_incidents(self, args: SecurityListArgs) -> Any:
         return await self._client.request_collection(
             "/security/incidents",
@@ -631,6 +711,9 @@ class GraphToolFactory:
             all_pages=args.all_pages,
             max_pages=args.max_pages,
         )
+
+    async def get_security_incident(self, args: GetSecurityIncidentArgs) -> Any:
+        return await self._client.request("GET", f"/security/incidents/{args.incident_id}")
 
     async def list_service_principals(self, args: ListServicePrincipalsArgs) -> Any:
         filters: list[str] = []
