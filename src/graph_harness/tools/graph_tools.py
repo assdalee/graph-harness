@@ -515,10 +515,15 @@ class GraphToolFactory:
     async def search_user(self, args: SearchUserArgs) -> Any:
         escaped = _escape_odata_string(args.query)
         filter_expression = (
-            f"displayName eq '{escaped}' or userPrincipalName eq '{escaped}' or mail eq '{escaped}'"
+            f"startswith(displayName,'{escaped}') "
+            f"or startswith(userPrincipalName,'{escaped}') "
+            f"or startswith(mail,'{escaped}')"
         )
         return await self._client.request(
-            "GET", "/users", params={"$filter": filter_expression, "$top": args.top}
+            "GET",
+            "/users",
+            params={"$filter": filter_expression, "$top": args.top},
+            advanced_query=True,
         )
 
     async def update_user(self, args: UpdateUserArgs) -> Any:
