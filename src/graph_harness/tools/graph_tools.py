@@ -88,6 +88,11 @@ class ListDevicesArgs(PaginationArgs):
     filter_expression: str | None = None
 
 
+class GetDeviceArgs(BaseModel):
+    device_id: str = Field(description="Directory device object ID.")
+    select_fields: list[str] | None = None
+
+
 class LogQueryArgs(PaginationArgs):
     user_principal_name: str | None = None
     created_after: datetime | None = None
@@ -385,13 +390,17 @@ class AuditActivityDomain(GraphDomain):
         ]
 
 
-class DeviceManagementDomain(GraphDomain):
+class DirectoryDeviceDomain(GraphDomain):
     metadata = DomainMetadata(
         name="devices",
-        display_name="Devices",
-        description="Directory devices and endpoint inventory exposed through Microsoft Graph.",
+        display_name="Directory Devices",
+        description=(
+            "Microsoft Entra directory device objects (registered and joined devices). "
+            "This is directory inventory only; it does not include Intune managed-device "
+            "or device-compliance data, which live under a separate Graph surface."
+        ),
         required_permissions=("Device.Read.All", "Directory.Read.All"),
-        tags=("devices", "endpoint", "intune", "compliance"),
+        tags=("devices", "endpoint", "entra", "directory", "registered", "joined"),
     )
 
     def __init__(self, handlers: Any) -> None:
@@ -401,11 +410,19 @@ class DeviceManagementDomain(GraphDomain):
         return [
             _tool(
                 "list_devices",
-                "List directory devices.",
+                "List Microsoft Entra directory devices.",
                 ListDevicesArgs,
                 self._handlers.list_devices,
                 domain=self.metadata.name,
                 tags=("devices", "endpoint", "directory", "read"),
+            ),
+            _tool(
+                "get_device",
+                "Get a Microsoft Entra directory device by object ID.",
+                GetDeviceArgs,
+                self._handlers.get_device,
+                domain=self.metadata.name,
+                tags=("device", "directory", "read"),
             ),
         ]
 
@@ -447,7 +464,7 @@ class GraphToolFactory:
             IdentityAccessDomain(self),
             SecurityDomain(self),
             AuditActivityDomain(self),
-            DeviceManagementDomain(self),
+            DirectoryDeviceDomain(self),
             CatalogOperationDomain(self),
         ]:
             registry.register_domain(domain)
@@ -571,6 +588,11 @@ class GraphToolFactory:
             params=_odata_params(args),
             all_pages=args.all_pages,
             max_pages=args.max_pages,
+        )
+
+    async def get_device(self, args: GetDeviceArgs) -> Any:
+        return await self._client.request(
+            "GET", f"/devices/{args.device_id}", params=_select_params(args.select_fields)
         )
 
     async def list_sign_in_logs(self, args: LogQueryArgs) -> Any:
