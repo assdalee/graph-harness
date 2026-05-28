@@ -115,23 +115,108 @@ class FakeLLMClient:
             return self._call("resolve_user", {"query": "Sarah Chen"})
         if "rate_limited" in lowered:
             return self._call("list_users", {"top": 1})
-        return LLMResponse(content="I cannot safely recover from that tool error in mock mode.")
+        if "upstream_error" in lowered or "transient_graph_error" in lowered:
+            return LLMResponse(
+                content=(
+                    "Microsoft Graph returned an upstream error while executing the tool. "
+                    "Check the Graph backend configuration and credentials, then retry."
+                )
+            )
+        if "validation_error" in lowered:
+            return LLMResponse(
+                content="The tool arguments were invalid. Please make the request more specific."
+            )
+        return LLMResponse(
+            content="The tool failed and mock recovery has no deterministic retry for this error."
+        )
 
     def _final_from_messages(self, messages: list[dict[str, Any]]) -> str:
         latest_tool = self._latest_tool_result(messages)
         if latest_tool is not None:
             return self._final_from_tool(latest_tool)
-        return "Mock final answer: no tool results were available."
+        return "I could not find a tool result to answer from."
 
     def _final_from_tool(self, result: dict[str, Any]) -> str:
         if not result.get("ok", False):
             error = result.get("error") or {}
-            return f"Mock final answer: tool failed with {error.get('code')}: {error.get('message')}"
+            return self._format_error(error)
+
+        data = result.get("data")
+        records = self._extract_records(data)
+        if records is not None:
+            return self._format_records(records)
+
+        if isinstance(data, dict) and data.get("success") is True:
+            return str(data.get("message") or "Operation completed successfully.")
+
         summary = result.get("summary") or "Tool completed."
         identifiers = result.get("identifiers") or []
         if identifiers:
-            return f"Mock final answer: {summary} Identifiers: {identifiers}"
-        return f"Mock final answer: {summary}"
+            return f"{summary} Key identifiers: {self._format_identifiers(identifiers)}."
+        return str(summary)
+
+    @staticmethod
+    def _format_error(error: dict[str, Any]) -> str:
+        code = str(error.get("code") or "upstream_error")
+        message = str(error.get("message") or "The tool call failed.")
+        if code == "permission_denied":
+            return (
+                f"Microsoft Graph returned permission_denied: {message} "
+                "The app likely needs additional Microsoft Graph permissions and admin consent."
+            )
+        return f"Microsoft Graph returned {code}: {message}"
+
+    def _format_records(self, records: list[Any]) -> str:
+        if not records:
+            return "Returned 0 records."
+
+        lines = [f"Returned {len(records)} record(s)."]
+        for record in records[:3]:
+            if not isinstance(record, dict):
+                lines.append(f"- {record}")
+                continue
+            lines.append(f"- {self._format_record(record)}")
+        return "\n".join(lines)
+
+    @staticmethod
+    def _format_record(record: dict[str, Any]) -> str:
+        primary = str(
+            record.get("title")
+            or record.get("displayName")
+            or record.get("userPrincipalName")
+            or record.get("id")
+            or "record"
+        )
+        details: list[str] = []
+        for label, key in (
+            ("id", "id"),
+            ("severity", "severity"),
+            ("status", "status"),
+            ("UPN", "userPrincipalName"),
+            ("mail", "mail"),
+            ("appId", "appId"),
+            ("scope", "scope"),
+            ("created", "createdDateTime"),
+        ):
+            value = record.get(key)
+            if value:
+                details.append(f"{label}: {value}")
+        return f"{primary} ({', '.join(details)})" if details else primary
+
+    @staticmethod
+    def _format_identifiers(identifiers: list[dict[str, Any]]) -> str:
+        return "; ".join(
+            ", ".join(f"{key}: {value}" for key, value in identifier.items())
+            for identifier in identifiers[:5]
+        )
+
+    @staticmethod
+    def _extract_records(data: Any) -> list[Any] | None:
+        if isinstance(data, dict) and isinstance(data.get("value"), list):
+            return data["value"]
+        if isinstance(data, list):
+            return data
+        return None
 
     def _call(self, name: str, args: dict[str, Any]) -> LLMResponse:
         return LLMResponse(tool_calls=[LLMToolCall(id=f"fake_{name}", name=name, args=args)])

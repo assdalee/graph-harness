@@ -1,3 +1,5 @@
+import pytest
+
 from graph_harness.core.config import Settings
 from graph_harness.llm.client import LiteLLMClient
 
@@ -63,3 +65,62 @@ def test_openrouter_key_match_is_case_insensitive() -> None:
     client = LiteLLMClient(settings)
 
     assert client._resolve_provider_api_key() == "sk-or-test"
+
+
+def test_runtime_completion_kwargs_do_not_send_temperature() -> None:
+    settings = Settings(llm_model="openai/gpt-4o-mini")
+
+    client = LiteLLMClient(settings)
+
+    kwargs = client._completion_kwargs([{"role": "user", "content": "hello"}])
+    assert "temperature" not in kwargs
+
+
+@pytest.mark.asyncio
+async def test_adds_disabled_dummy_tool_for_anthropic_tool_history(monkeypatch) -> None:
+    captured: dict = {}
+
+    async def fake_acompletion(**kwargs):
+        captured.update(kwargs)
+        return {"choices": [{"message": {"content": "done"}}]}
+
+    import litellm
+
+    monkeypatch.setattr(litellm, "acompletion", fake_acompletion)
+    settings = Settings(llm_model="claude-opus-4-7")
+    client = LiteLLMClient(settings)
+
+    response = await client.complete(
+        messages=[
+            {"role": "assistant", "content": "", "tool_calls": [{"id": "call-1"}]},
+            {"role": "tool", "tool_call_id": "call-1", "content": "{}"},
+            {"role": "user", "content": "Write final answer."},
+        ],
+        tools=None,
+        tool_choice=None,
+    )
+
+    assert response.content == "done"
+    assert captured["tool_choice"] == "none"
+    assert captured["tools"][0]["function"]["name"] == "final_answer_context"
+    assert "temperature" not in captured
+
+
+@pytest.mark.asyncio
+async def test_does_not_add_dummy_tool_without_tool_history(monkeypatch) -> None:
+    captured: dict = {}
+
+    async def fake_acompletion(**kwargs):
+        captured.update(kwargs)
+        return {"choices": [{"message": {"content": "done"}}]}
+
+    import litellm
+
+    monkeypatch.setattr(litellm, "acompletion", fake_acompletion)
+    settings = Settings(llm_model="claude-opus-4-7")
+    client = LiteLLMClient(settings)
+
+    await client.complete(messages=[{"role": "user", "content": "hello"}], tools=None)
+
+    assert "tools" not in captured
+    assert "tool_choice" not in captured

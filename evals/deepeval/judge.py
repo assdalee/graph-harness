@@ -28,7 +28,7 @@ def build_judge_model() -> Any:
     class LiteLLMDeepEvalJudge(DeepEvalBaseLLM):
         def __init__(self) -> None:
             self.model = os.getenv("DEEPEVAL_JUDGE_MODEL", DEFAULT_JUDGE_MODEL)
-            self.temperature = float(os.getenv("DEEPEVAL_JUDGE_TEMPERATURE", "0"))
+            self.temperature = _optional_float(os.getenv("DEEPEVAL_JUDGE_TEMPERATURE", "0"))
             self.timeout = float(os.getenv("DEEPEVAL_JUDGE_TIMEOUT_SECONDS", "90"))
 
         def load_model(self) -> str:
@@ -54,12 +54,14 @@ def build_judge_model() -> Any:
             return f"LiteLLM judge ({self.model})"
 
         def _base_kwargs(self, prompt: str) -> dict[str, Any]:
-            return {
+            kwargs = {
                 "model": self.model,
                 "messages": [{"role": "user", "content": prompt}],
-                "temperature": self.temperature,
                 "timeout": self.timeout,
             }
+            if self.temperature is not None and not _model_deprecates_temperature(self.model):
+                kwargs["temperature"] = self.temperature
+            return kwargs
 
         def _complete_sync(
             self,
@@ -88,11 +90,26 @@ def build_judge_model() -> Any:
 
 def ensure_judge_is_configured() -> None:
     model = os.getenv("DEEPEVAL_JUDGE_MODEL", DEFAULT_JUDGE_MODEL)
-    if model.startswith("anthropic/") and not os.getenv("ANTHROPIC_API_KEY"):
+    if _is_anthropic_model(model) and not os.getenv("ANTHROPIC_API_KEY"):
         raise RuntimeError(
             "ANTHROPIC_API_KEY is required for the configured DeepEval judge model. "
             "Set ANTHROPIC_API_KEY or choose another DEEPEVAL_JUDGE_MODEL."
         )
+
+
+def _optional_float(value: str | None) -> float | None:
+    if value is None or value.strip().lower() in {"", "none", "null", "off"}:
+        return None
+    return float(value)
+
+
+def _is_anthropic_model(model: str) -> bool:
+    return model.startswith("anthropic/") or model.startswith("claude-")
+
+
+def _model_deprecates_temperature(model: str) -> bool:
+    normalized = (model or "").strip().lower()
+    return "claude-opus-4-7" in normalized
 
 
 def _schema_prompt(prompt: str, schema: type[BaseModel] | None) -> str:

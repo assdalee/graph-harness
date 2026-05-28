@@ -136,17 +136,18 @@ npm run build
 Run the full stack with Docker Compose:
 
 ```bash
-GRAPH_BACKEND=mock LLM_BACKEND=fake docker compose up --build
+docker compose up --build
 ```
 
-Open `http://localhost:5173`. The frontend container serves the React build with Nginx and
-proxies `/api` to the backend container.
+Open `http://localhost:5173`. In the base Compose setup, both containers run in development
+mode: backend source is mounted into `/app/src` and served with `uvicorn --reload`, while the
+frontend source is mounted into Vite with hot module reload.
 
 Useful container endpoints:
 
 ```bash
 curl -s http://localhost:8091/health
-curl -s http://localhost:5173/healthz
+curl -s http://localhost:5173
 ```
 
 To use live Microsoft Graph and a real LiteLLM provider, set the same environment variables
@@ -158,6 +159,8 @@ docker compose -f docker-compose.yml -f docker-compose.live.yml up --build
 
 By default, Compose falls back to `GRAPH_BACKEND=mock` and `LLM_BACKEND=fake` when those
 variables are not set, so the stack can run without Microsoft Graph or LLM credentials.
+Use `docker compose -f docker-compose.yml -f docker-compose.live.yml up --build` when you
+want the live override to load `.env` and call real Microsoft Graph / LiteLLM providers.
 
 ## Configuration
 
@@ -168,7 +171,6 @@ APP_NAME="GraphHarness"
 
 LLM_BACKEND=fake
 LLM_MODEL=openai/gpt-4o-mini
-LITELLM_TEMPERATURE=0
 
 GRAPH_BACKEND=mock
 GRAPH_TENANT_ID=

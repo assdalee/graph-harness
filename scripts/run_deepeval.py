@@ -10,6 +10,10 @@ ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_MODEL = "anthropic/claude-3-5-sonnet-20241022"
 
 
+def _is_anthropic_model(model: str) -> bool:
+    return model.startswith("anthropic/") or model.startswith("claude-")
+
+
 def main() -> int:
     deepeval_bin = shutil.which("deepeval")
     if deepeval_bin is None:
@@ -17,7 +21,7 @@ def main() -> int:
         return 0
 
     model = os.getenv("DEEPEVAL_JUDGE_MODEL", DEFAULT_MODEL)
-    if model.startswith("anthropic/") and not os.getenv("ANTHROPIC_API_KEY"):
+    if _is_anthropic_model(model) and not os.getenv("ANTHROPIC_API_KEY"):
         print(
             "SKIP DeepEval: ANTHROPIC_API_KEY is required for the configured judge model "
             f"({model})."

@@ -7,14 +7,16 @@ services:
     environment:
       APP_NAME: ${APP_NAME:-GraphHarness}
       APP_ENV: ${APP_ENV:-local}
+      PYTHONPATH: /app/src
       API_KEY_NAME: ${API_KEY_NAME:-x-api-key}
-      LLM_BACKEND: ${LLM_BACKEND:-fake}
+      # Base compose is intentionally local-only. Use docker-compose.live.yml
+      # when you want live Microsoft Graph and a real LiteLLM provider.
+      LLM_BACKEND: fake
       LLM_FAKE_SCENARIOS_PATH: ${LLM_FAKE_SCENARIOS_PATH:-}
       LLM_MODEL: ${LLM_MODEL:-openai/gpt-4o-mini}
-      LITELLM_TEMPERATURE: ${LITELLM_TEMPERATURE:-0}
       LITELLM_MAX_TOKENS: ${LITELLM_MAX_TOKENS:-2048}
       LITELLM_TIMEOUT_SECONDS: ${LITELLM_TIMEOUT_SECONDS:-60}
-      GRAPH_BACKEND: ${GRAPH_BACKEND:-mock}
+      GRAPH_BACKEND: mock
       GRAPH_SCOPES: ${GRAPH_SCOPES:-https://graph.microsoft.com/.default}
       GRAPH_DEFAULT_API_VERSION: ${GRAPH_DEFAULT_API_VERSION:-v1.0}
       GRAPH_TIMEOUT_SECONDS: ${GRAPH_TIMEOUT_SECONDS:-30}
@@ -33,6 +35,20 @@ services:
       AGENT_REQUIRE_MUTATION_CONFIRMATION: ${AGENT_REQUIRE_MUTATION_CONFIRMATION:-true}
       AGENT_ENABLE_DOMAIN_TOOL_SELECTION: ${AGENT_ENABLE_DOMAIN_TOOL_SELECTION:-true}
       AGENT_DOMAIN_TOOL_SELECTION_MAX_TOOLS: ${AGENT_DOMAIN_TOOL_SELECTION_MAX_TOOLS:-16}
+    command:
+      - uvicorn
+      - graph_harness.app.main:create_app
+      - --factory
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8091"
+      - --reload
+      - --reload-dir
+      - /app/src
+    volumes:
+      - ./src:/app/src
+      - ./data:/app/data
     ports:
       - "8091:8091"
 
@@ -40,11 +56,32 @@ services:
     build:
       context: .
       dockerfile: frontend/Dockerfile
+      target: build
       args:
         VITE_API_BASE_URL: ${VITE_API_BASE_URL:-/api}
     image: graph-harness-frontend:local
+    command: npm run dev
+    environment:
+      VITE_API_BASE_URL: ${VITE_API_BASE_URL:-/api}
+      VITE_API_PROXY_TARGET: http://backend:8091
+    volumes:
+      - ./frontend:/app
+      - frontend_node_modules:/app/node_modules
     depends_on:
       backend:
         condition: service_healthy
     ports:
-      - "5173:80"
+      - "5173:5173"
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:5173').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+      interval: 30s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
+
+volumes:
+  frontend_node_modules:

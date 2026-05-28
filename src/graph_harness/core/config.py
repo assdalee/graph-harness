@@ -25,7 +25,6 @@ class Settings(BaseModel):
     llm_api_key_provider: str | None = None
     openrouter_api_key: str | None = None
     litellm_api_base: str | None = None
-    litellm_temperature: float = 0
     litellm_max_tokens: int = 2048
     litellm_timeout_seconds: float = 60
 
@@ -151,7 +150,6 @@ class Settings(BaseModel):
             or _get_optional_str("LLM_API_KEY_PROVIDER"),
             openrouter_api_key=_get_optional_str("OPENROUTER_API_KEY"),
             litellm_api_base=_get_optional_str("LITELLM_API_BASE"),
-            litellm_temperature=_get_float("LITELLM_TEMPERATURE", 0),
             litellm_max_tokens=_get_int("LITELLM_MAX_TOKENS", 2048),
             litellm_timeout_seconds=_get_float("LITELLM_TIMEOUT_SECONDS", 60),
             graph_tenant_id=_get_str("GRAPH_TENANT_ID", ""),

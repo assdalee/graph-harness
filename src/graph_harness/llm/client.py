@@ -29,10 +29,23 @@ class LiteLLMClient:
                 "`pip install -e .` or `pip install litellm`."
             ) from exc
 
+        kwargs = self._completion_kwargs(messages)
+        if tools is not None:
+            kwargs["tools"] = tools
+            kwargs["tool_choice"] = tool_choice
+        elif _model_requires_tools_for_tool_history(self._settings.llm_model) and _has_tool_history(
+            messages
+        ):
+            kwargs["tools"] = [_anthropic_finalization_tool()]
+            kwargs["tool_choice"] = "none"
+
+        raw = await litellm.acompletion(**kwargs)
+        return self._normalize_response(raw)
+
+    def _completion_kwargs(self, messages: list[dict[str, Any]]) -> dict[str, Any]:
         kwargs: dict[str, Any] = {
             "model": self._settings.llm_model,
             "messages": messages,
-            "temperature": self._settings.litellm_temperature,
             "max_tokens": self._settings.litellm_max_tokens,
             "timeout": self._settings.litellm_timeout_seconds,
         }
@@ -41,12 +54,7 @@ class LiteLLMClient:
         resolved_key = self._resolve_provider_api_key()
         if resolved_key:
             kwargs["api_key"] = resolved_key
-        if tools is not None:
-            kwargs["tools"] = tools
-            kwargs["tool_choice"] = tool_choice
-
-        raw = await litellm.acompletion(**kwargs)
-        return self._normalize_response(raw)
+        return kwargs
 
     def _resolve_provider_api_key(self) -> str | None:
         """Pick the provider API key based on the configured model.
@@ -97,3 +105,35 @@ class LiteLLMClient:
         if isinstance(obj, dict):
             return obj.get(key, default)
         return getattr(obj, key, default)
+
+
+def _model_requires_tools_for_tool_history(model: str) -> bool:
+    normalized = (model or "").strip().lower()
+    return "anthropic/" in normalized or "claude-" in normalized
+
+
+def _has_tool_history(messages: list[dict[str, Any]]) -> bool:
+    for message in messages:
+        if message.get("role") == "tool":
+            return True
+        if message.get("role") == "assistant" and message.get("tool_calls"):
+            return True
+    return False
+
+
+def _anthropic_finalization_tool() -> dict[str, Any]:
+    return {
+        "type": "function",
+        "function": {
+            "name": "final_answer_context",
+            "description": (
+                "Placeholder tool schema required by Anthropic when prior tool results are "
+                "present. Do not call this tool; write the final answer instead."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {},
+                "additionalProperties": False,
+            },
+        },
+    }

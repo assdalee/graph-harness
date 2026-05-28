@@ -1,5 +1,10 @@
 [
   {
+    "match": "list security incidents",
+    "tool": "graph_operation",
+    "args": {"operation_name": "list_security_incidents"}
+  },
+  {
     "match": "scenario service principals",
     "tool": "list_service_principals",
     "args": {"top": 10}
@@ -10,4 +15,3 @@
     "args": {"top": 10}
   }
 ]
-
