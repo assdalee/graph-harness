@@ -1,3 +1,4 @@
+import graph_harness.llm.profiles as profiles
 from graph_harness.llm.profiles import resolve_profile
 
 
@@ -29,3 +30,17 @@ def test_override_forces_value_regardless_of_family() -> None:
 
 def test_case_insensitive_matching() -> None:
     assert resolve_profile("Anthropic/Claude-3-5-Sonnet").requires_tools_with_tool_history
+
+
+def test_provider_probe_detects_anthropic_alias(monkeypatch) -> None:
+    # A custom alias with no "claude"/"anthropic" in the string, but LiteLLM
+    # resolves it to the anthropic provider.
+    profiles._provider_of.cache_clear()
+    monkeypatch.setattr(profiles, "_provider_of", lambda model: "anthropic")
+    assert resolve_profile("my-internal-llm").requires_tools_with_tool_history
+
+
+def test_provider_probe_failure_falls_back_to_default(monkeypatch) -> None:
+    profiles._provider_of.cache_clear()
+    monkeypatch.setattr(profiles, "_provider_of", lambda model: None)
+    assert resolve_profile("my-internal-llm").requires_tools_with_tool_history is False
