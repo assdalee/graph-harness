@@ -1,3 +1,5 @@
+"""Abstract run store interface and persisted run record models for the runs subsystem."""
+
 from __future__ import annotations
 
 from datetime import datetime
@@ -9,6 +11,8 @@ from graph_harness.api_models.chat import AgentTraceEvent, LLMCallRecord, ToolCa
 
 
 class RunSummary(BaseModel):
+    """Lightweight run row for list views, carrying counts instead of full payloads."""
+
     model_config = ConfigDict(extra="ignore")
 
     id: str
@@ -29,6 +33,8 @@ class RunSummary(BaseModel):
 
 
 class RunRecord(BaseModel):
+    """Full persisted record of a single agent run, including messages, tool calls, and traces."""
+
     model_config = ConfigDict(extra="ignore")
 
     id: str
@@ -54,6 +60,7 @@ class RunRecord(BaseModel):
     tags: dict[str, Any] = Field(default_factory=dict)
 
     def to_summary(self) -> RunSummary:
+        """Derive the lightweight summary view from this full record."""
         return RunSummary(
             id=self.id,
             thread_id=self.thread_id,
@@ -74,6 +81,8 @@ class RunRecord(BaseModel):
 
 
 class RunListFilters(BaseModel):
+    """Query filters and pagination bounds for listing and counting stored runs."""
+
     status: str | None = None
     thread_id: str | None = None
     user_id: str | None = None
@@ -85,25 +94,42 @@ class RunListFilters(BaseModel):
 
 
 class RunStore(Protocol):
-    async def record(self, run: RunRecord) -> bool: ...
-    async def get(self, run_id: str) -> RunRecord | None: ...
-    async def list(self, filters: RunListFilters) -> list[RunSummary]: ...
-    async def count(self, filters: RunListFilters) -> int: ...
+    """Structural interface every run store backend must implement."""
+
+    async def record(self, run: RunRecord) -> bool:
+        """Persist a run (insert or upsert); return whether it was stored."""
+        ...
+
+    async def get(self, run_id: str) -> RunRecord | None:
+        """Fetch a single run by id, or None if it does not exist."""
+        ...
+
+    async def list(self, filters: RunListFilters) -> list[RunSummary]:
+        """Return run summaries matching the given filters."""
+        ...
+
+    async def count(self, filters: RunListFilters) -> int:
+        """Return the number of runs matching the given filters."""
+        ...
 
 
 class NullRunStore:
     """No-op store used when persistence is disabled."""
 
     async def record(self, run: RunRecord) -> bool:
+        """Discard the run and report that nothing was persisted."""
         return False
 
     async def get(self, run_id: str) -> RunRecord | None:
+        """Return nothing since no runs are ever stored."""
         return None
 
     async def list(self, filters: RunListFilters) -> list[RunSummary]:
+        """Return an empty list since no runs are ever stored."""
         return []
 
     async def count(self, filters: RunListFilters) -> int:
+        """Return zero since no runs are ever stored."""
         return 0
 
 

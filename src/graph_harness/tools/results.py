@@ -1,3 +1,5 @@
+"""Normalized tool result envelopes and helpers for classifying and summarizing payloads."""
+
 from __future__ import annotations
 
 from typing import Any, Literal
@@ -20,12 +22,16 @@ ToolErrorCode = Literal[
 
 
 class ToolError(BaseModel):
+    """Structured tool failure with a stable code, message, and optional details."""
+
     code: ToolErrorCode
     message: str
     details: dict[str, Any] = Field(default_factory=dict)
 
 
 class ToolResult(BaseModel):
+    """Uniform success/failure envelope returned to the model for every tool call."""
+
     ok: bool
     data: Any = None
     summary: str = ""
@@ -34,6 +40,7 @@ class ToolResult(BaseModel):
 
     @classmethod
     def success(cls, data: Any, *, summary: str | None = None) -> "ToolResult":
+        """Build a successful result, auto-deriving a summary and identifiers from data."""
         return cls(
             ok=True,
             data=data,
@@ -49,6 +56,7 @@ class ToolResult(BaseModel):
         *,
         details: dict[str, Any] | None = None,
     ) -> "ToolResult":
+        """Build a failure result wrapping the given error code and message."""
         return cls(
             ok=False,
             data=None,
@@ -59,6 +67,7 @@ class ToolResult(BaseModel):
 
     @classmethod
     def from_payload(cls, payload: Any) -> "ToolResult":
+        """Coerce a raw handler payload into a result, detecting embedded Graph errors."""
         if isinstance(payload, ToolResult):
             return payload
         graph_error = _extract_graph_error(payload)
@@ -72,6 +81,7 @@ class ToolResult(BaseModel):
 
 
 def classify_error(status_code: int | None, message: str) -> ToolErrorCode:
+    """Map a Graph status code and message to a stable tool error code."""
     text = message.lower()
     if status_code in {401, 403} or "permission" in text or "authorization" in text:
         return "permission_denied"
@@ -87,6 +97,7 @@ def classify_error(status_code: int | None, message: str) -> ToolErrorCode:
 
 
 def summarize_payload(payload: Any) -> str:
+    """Produce a short human-readable summary of a tool payload for the model."""
     records = extract_records(payload)
     if records is not None:
         if not records:
@@ -105,6 +116,7 @@ def summarize_payload(payload: Any) -> str:
 
 
 def extract_records(payload: Any) -> list[Any] | None:
+    """Return the list of records in a Graph collection or list payload, else None."""
     if isinstance(payload, dict) and isinstance(payload.get("value"), list):
         return payload["value"]
     if isinstance(payload, list):
@@ -124,6 +136,7 @@ IDENTIFIER_FIELDS = {
 
 
 def extract_identifiers(payload: Any) -> list[dict[str, Any]]:
+    """Pull known identifier fields from the first records so the model can reference them."""
     records = extract_records(payload)
     source = records if records is not None else [payload]
     identifiers: list[dict[str, Any]] = []
@@ -137,6 +150,7 @@ def extract_identifiers(payload: Any) -> list[dict[str, Any]]:
 
 
 def _extract_graph_error(payload: Any) -> dict[str, Any] | None:
+    """Return the embedded Graph error object from a payload, normalizing its shape."""
     if not isinstance(payload, dict) or "error" not in payload:
         return None
     error = payload["error"]

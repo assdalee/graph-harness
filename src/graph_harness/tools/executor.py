@@ -1,3 +1,5 @@
+"""Validates, gates, and runs model-requested tool calls into structured results."""
+
 import asyncio
 from typing import Any
 
@@ -14,10 +16,12 @@ class ToolExecutor:
     """Validates and executes model-requested tool calls."""
 
     def __init__(self, registry: ToolRegistry, settings: Settings) -> None:
+        """Store the tool registry and settings used to gate and run calls."""
         self._registry = registry
         self._settings = settings
 
     async def execute_calls(self, calls: list[LLMToolCall]) -> list[ToolCallRecord]:
+        """Execute a capped batch of calls, running read-only sets in parallel when enabled."""
         limited = calls[: self._settings.agent_max_tool_calls]
         if (
             self._settings.agent_parallel_reads
@@ -31,6 +35,7 @@ class ToolExecutor:
         return records
 
     async def execute_call(self, call: LLMToolCall) -> ToolCallRecord:
+        """Run one call, enforcing unknown-tool and confirmation gates, and capture errors."""
         tool = self._registry.get(call.name)
         if tool is None:
             result = ToolResult.failure("unknown_tool", f"Unknown tool '{call.name}'.")
@@ -100,11 +105,13 @@ class ToolExecutor:
             )
 
     def _is_read_only(self, name: str) -> bool:
+        """Report whether the named tool exists and is read-only."""
         tool = self._registry.get(name)
         return bool(tool and tool.read_only)
 
 
 def extract_data(records: list[ToolCallRecord]) -> list[Any]:
+    """Flatten successful tool-call payloads into a single list, skipping errored records."""
     data: list[Any] = []
     for record in records:
         if record.error:

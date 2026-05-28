@@ -1,3 +1,5 @@
+"""In-memory tool/domain registry with query-aware tool selection for model turns."""
+
 from __future__ import annotations
 
 import re
@@ -7,11 +9,15 @@ from graph_harness.tools.base import ToolDefinition
 
 
 class ToolRegistry:
+    """Holds registered tools and domains and selects relevant subsets for a query."""
+
     def __init__(self) -> None:
+        """Initialize empty tool and domain maps."""
         self._tools: dict[str, ToolDefinition] = {}
         self._domains: dict[str, DomainMetadata] = {}
 
     def register_domain(self, domain: GraphDomain) -> None:
+        """Record domain metadata and register all of its tools, rejecting duplicates."""
         if domain.name in self._domains:
             raise ValueError(f"Duplicate domain registered: {domain.name}")
         self._domains[domain.name] = domain.metadata
@@ -19,6 +25,7 @@ class ToolRegistry:
             self.register(tool)
 
     def register(self, tool: ToolDefinition) -> None:
+        """Add a tool, synthesizing default domain metadata if its domain is unknown."""
         if tool.name in self._tools:
             raise ValueError(f"Duplicate tool registered: {tool.name}")
         if tool.domain not in self._domains:
@@ -30,21 +37,27 @@ class ToolRegistry:
         self._tools[tool.name] = tool
 
     def get(self, name: str) -> ToolDefinition | None:
+        """Return the tool registered under ``name``, or None if absent."""
         return self._tools.get(name)
 
     def list(self) -> list[ToolDefinition]:
+        """Return all registered tools sorted by name."""
         return sorted(self._tools.values(), key=lambda tool: tool.name)
 
     def openai_tools(self) -> list[dict]:
+        """Return every tool rendered as a LiteLLM function-tool schema."""
         return [tool.to_openai_tool() for tool in self.list()]
 
     def list_domains(self) -> list[DomainMetadata]:
+        """Return all registered domains sorted by name."""
         return sorted(self._domains.values(), key=lambda domain: domain.name)
 
     def tools_for_domain(self, domain: str) -> list[ToolDefinition]:
+        """Return tools belonging to the given domain."""
         return [tool for tool in self.list() if tool.domain == domain]
 
     def search_tools(self, query: str, *, max_tools: int | None = None) -> list[ToolDefinition]:
+        """Rank tools by token overlap with the query, falling back to all tools."""
         tokens = _tokenize(query)
         if not tokens:
             return self.list()
@@ -103,6 +116,7 @@ class ToolRegistry:
         return domain_tools[:max_tools]
 
     def _score_domain(self, domain: DomainMetadata, tokens: set[str]) -> int:
+        """Score a domain by how many query tokens appear in its descriptive text."""
         haystack = " ".join(
             [
                 domain.name,
@@ -114,6 +128,7 @@ class ToolRegistry:
         return sum(3 for token in tokens if token in haystack)
 
     def _score_tool(self, tool: ToolDefinition, tokens: set[str]) -> int:
+        """Score a tool by token matches, weighting name-word hits over other text."""
         haystack = " ".join(
             [
                 tool.name.replace("_", " "),
@@ -134,6 +149,7 @@ class ToolRegistry:
 
 
 def _tokenize(text: str) -> set[str]:
+    """Normalize query text into a set of search tokens, expanding aliases and dropping stopwords."""
     aliases = {
         "signin": "sign in",
         "signins": "sign in",

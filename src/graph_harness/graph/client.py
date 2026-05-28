@@ -1,3 +1,4 @@
+"""Live pooled async HTTP client for Microsoft Graph with retry and paging."""
 import asyncio
 from typing import Any
 
@@ -18,16 +19,19 @@ class GraphClient:
     _retry_statuses = {429, 500, 502, 503, 504}
 
     def __init__(self, settings: Settings, token_provider: GraphTokenProvider) -> None:
+        """Store settings and token provider; the httpx client is created lazily."""
         self._settings = settings
         self._token_provider = token_provider
         self._client: httpx.AsyncClient | None = None
 
     def _http_client(self) -> httpx.AsyncClient:
+        """Return the shared async client, recreating it if absent or closed."""
         if self._client is None or self._client.is_closed:
             self._client = httpx.AsyncClient(timeout=self._settings.graph_timeout_seconds)
         return self._client
 
     async def aclose(self) -> None:
+        """Close the pooled client on shutdown to release connections."""
         if self._client is not None and not self._client.is_closed:
             await self._client.aclose()
         self._client = None
@@ -42,6 +46,7 @@ class GraphClient:
         api_version: str | None = None,
         advanced_query: bool = False,
     ) -> Any:
+        """Issue a Graph request with token auth, retrying transient and throttled responses."""
         clean_endpoint = endpoint if endpoint.startswith("/") else f"/{endpoint}"
         version = api_version or self._settings.graph_default_api_version
         url = f"https://graph.microsoft.com/{version}{clean_endpoint}"
@@ -111,6 +116,7 @@ class GraphClient:
         max_pages: int = 1,
         advanced_query: bool = False,
     ) -> Any:
+        """Fetch a collection, optionally following @odata.nextLink up to max_pages."""
         first_page = await self.request(
             "GET", endpoint, params=params, api_version=api_version, advanced_query=advanced_query
         )
@@ -139,6 +145,7 @@ class GraphClient:
         return merged
 
     async def _request_absolute_url(self, url: str, *, advanced_query: bool = False) -> Any:
+        """GET a fully-qualified URL such as a paging nextLink, without rebuilding the base URL."""
         token = await asyncio.to_thread(self._token_provider.get_token)
         headers = {
             "Authorization": f"Bearer {token}",
@@ -163,6 +170,7 @@ class GraphClient:
 
     @staticmethod
     def _extract_error_message(payload: Any) -> str:
+        """Pull a human-readable message out of a Graph error payload."""
         if isinstance(payload, dict):
             error = payload.get("error")
             if isinstance(error, dict):

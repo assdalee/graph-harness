@@ -1,3 +1,5 @@
+"""Decide when a tool error warrants pausing to ask the user instead of retrying or finalizing."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -8,6 +10,8 @@ from graph_harness.core.config import Settings
 
 @dataclass(frozen=True)
 class ClarificationDecision:
+    """Stop instruction carrying the user-facing question, stop reason, and warning."""
+
     answer: str
     stop_reason: str
     warning: str
@@ -17,9 +21,11 @@ class ClarificationPolicy:
     """Detect cases where asking the user is safer than retrying or finalizing."""
 
     def __init__(self, settings: Settings) -> None:
+        """Store settings so the policy can be toggled off."""
         self._settings = settings
 
     def evaluate(self, records: list[ToolCallRecord]) -> ClarificationDecision | None:
+        """Return a stop decision when a record needs confirmation or has ambiguous identity."""
         if not self._settings.agent_enable_clarification_policy:
             return None
 
@@ -44,6 +50,7 @@ class ClarificationPolicy:
         return None
 
     def _ambiguous_identity_answer(self, record: ToolCallRecord) -> str:
+        """Render the candidate matches as a choose-one prompt for the user."""
         assert record.error is not None
         matches = record.error.details.get("matches")
         if not isinstance(matches, list) or not matches:

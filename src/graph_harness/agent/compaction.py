@@ -1,3 +1,5 @@
+"""Summarize older conversation turns into a compact, identifier-preserving view for LLM calls."""
+
 from __future__ import annotations
 
 import json
@@ -10,9 +12,11 @@ class ContextCompactor:
     """Build a compact, identifier-preserving message view for LLM calls."""
 
     def __init__(self, settings: Settings) -> None:
+        """Store settings controlling whether and how aggressively to compact."""
         self._settings = settings
 
     def compact(self, messages: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], bool]:
+        """Replace older turns with a summary while keeping system, first intent, and recent turns."""
         if not self._settings.agent_enable_context_compaction:
             return messages, False
 
@@ -43,6 +47,7 @@ class ContextCompactor:
         return compacted, True
 
     def _build_summary(self, messages: list[dict[str, Any]]) -> str:
+        """Condense omitted turns into assistant notes, tool results, and recovery directives."""
         tool_summaries: list[str] = []
         assistant_notes: list[str] = []
         recovery_or_clarification: list[str] = []
@@ -74,6 +79,7 @@ class ContextCompactor:
         return _truncate("\n".join(parts), self._settings.agent_context_max_tool_chars)
 
     def _summarize_tool_message(self, message: dict[str, Any]) -> str:
+        """Reduce a tool message to a one-line summary preserving identifiers and errors."""
         name = message.get("name") or "tool"
         try:
             payload = json.loads(str(message.get("content") or "{}"))
@@ -96,6 +102,7 @@ class ContextCompactor:
 
 
 def _truncate(value: str, max_chars: int) -> str:
+    """Clip a string to a character budget, marking it when truncated."""
     if len(value) <= max_chars:
         return value
     return f"{value[:max_chars]} ...[truncated]"

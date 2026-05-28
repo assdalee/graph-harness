@@ -1,3 +1,5 @@
+"""HTTP routes for listing and fetching recorded agent runs."""
+
 from collections.abc import Callable
 from datetime import datetime
 
@@ -9,6 +11,8 @@ from graph_harness.runs.store import NullRunStore, RunListFilters, RunRecord, Ru
 
 
 class RunListResponse(BaseModel):
+    """Paginated envelope of run summaries with total count and window."""
+
     runs: list[RunSummary] = Field(default_factory=list)
     total: int = 0
     limit: int = 50
@@ -16,6 +20,7 @@ class RunListResponse(BaseModel):
 
 
 def create_runs_router(auth_dependency: Callable) -> APIRouter:
+    """Build the runs router guarded by the given auth dependency."""
     router = APIRouter(prefix="/v1/runs", tags=["runs"], dependencies=[Depends(auth_dependency)])
 
     @router.get("", response_model=RunListResponse)
@@ -30,6 +35,7 @@ def create_runs_router(auth_dependency: Callable) -> APIRouter:
         limit: int = Query(default=50, ge=1, le=500),
         offset: int = Query(default=0, ge=0),
     ) -> RunListResponse:
+        """List recorded runs matching the given filters, paginated."""
         _ensure_store_enabled(store)
         filters = RunListFilters(
             status=status,
@@ -50,6 +56,7 @@ def create_runs_router(auth_dependency: Callable) -> APIRouter:
         run_id: str,
         store: RunStore = Depends(get_run_store),
     ) -> RunRecord:
+        """Fetch a single recorded run by id, or 404 if missing."""
         _ensure_store_enabled(store)
         record = await store.get(run_id)
         if record is None:
@@ -60,5 +67,6 @@ def create_runs_router(auth_dependency: Callable) -> APIRouter:
 
 
 def _ensure_store_enabled(store: RunStore) -> None:
+    """Raise 404 when run recording is disabled so the API hides the feature."""
     if isinstance(store, NullRunStore):
         raise HTTPException(status_code=404, detail="run store disabled")

@@ -1,9 +1,13 @@
+"""Pydantic response models describing available operations and domains for the API."""
+
 from typing import Any
 
 from pydantic import BaseModel, Field
 
 
 class OperationSummary(BaseModel):
+    """Catalog entry for one operation, including its safety and permission metadata."""
+
     name: str
     description: str
     read_only: bool
@@ -16,6 +20,8 @@ class OperationSummary(BaseModel):
 
 
 class DomainSummary(BaseModel):
+    """Catalog entry for one operation domain and its aggregate operation count."""
+
     name: str
     display_name: str
     description: str
@@ -25,6 +31,8 @@ class DomainSummary(BaseModel):
 
 
 class OperationsResponse(BaseModel):
+    """Response listing all exposed operations grouped by domain with counts."""
+
     operation_count: int
     domain_count: int = 0
     domains: list[DomainSummary] = Field(default_factory=list)

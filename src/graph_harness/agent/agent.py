@@ -1,3 +1,5 @@
+"""Orchestrate the explicit agent turn loop: model call, tool execution, recovery, compaction, and tracing."""
+
 import copy
 import json
 import logging
@@ -36,6 +38,7 @@ class GraphAgent:
         executor: ToolExecutor,
         settings: Settings,
     ) -> None:
+        """Wire the LLM client, tool plumbing, and the recovery/clarification/compaction policies."""
         self._llm = llm_client
         self._registry = registry
         self._executor = executor
@@ -51,6 +54,7 @@ class GraphAgent:
         thread_id: str | None = None,
         on_event: Callable[[AgentTraceEvent], None] | None = None,
     ) -> ChatResponse:
+        """Drive turns until a final answer, stop condition, or budget/turn limit is hit."""
         state = AgentRunState(messages=self._initial_messages(messages), on_event=on_event)
         answer = ""
         tool_call_counts: dict[str, int] = {}
@@ -252,6 +256,7 @@ class GraphAgent:
         )
 
     def _initial_messages(self, messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """Prepend the system prompt and order caller system messages ahead of user turns."""
         user_messages = [message for message in messages if message.get("role") != "system"]
         system_messages = [message for message in messages if message.get("role") == "system"]
         return [
@@ -261,6 +266,7 @@ class GraphAgent:
         ]
 
     def _select_tools_for_turn(self, state: AgentRunState) -> list[ToolDefinition]:
+        """Expose either the full tool set or a domain-narrowed subset to keep the prompt small."""
         if not self._settings.agent_enable_domain_tool_selection:
             tools = self._registry.list()
             self._trace(
@@ -290,6 +296,7 @@ class GraphAgent:
 
     @staticmethod
     def _tool_selection_query(messages: list[dict[str, Any]]) -> str:
+        """Build the tool-selection query from the most recent user turns."""
         recent_user_messages = [
             str(message.get("content") or "")
             for message in messages
@@ -298,6 +305,7 @@ class GraphAgent:
         return "\n".join(recent_user_messages)
 
     async def _finalize(self, state: AgentRunState) -> str:
+        """Make a tool-free LLM call to synthesize the user-facing answer."""
         final_messages = [
             *state.messages,
             {"role": "user", "content": FINAL_RESPONSE_INSTRUCTION},
@@ -321,6 +329,7 @@ class GraphAgent:
         messages: list[dict[str, Any]] | None = None,
         capture_phase: str | None = None,
     ) -> LLMResponse | None:
+        """Compact context then call the LLM with retries, returning None when all attempts fail."""
         attempts = self._settings.agent_llm_retries + 1
         source_messages = messages or state.messages
         llm_messages, compacted = self._context_compactor.compact(source_messages)
@@ -385,6 +394,7 @@ class GraphAgent:
         counts: dict[str, int],
         state: AgentRunState,
     ) -> list[LLMToolCall]:
+        """Cap the number of calls and drop repeated identical calls to prevent loops."""
         filtered: list[LLMToolCall] = []
         for call in calls[: self._settings.agent_max_tool_calls]:
             signature = json.dumps(
@@ -406,6 +416,7 @@ class GraphAgent:
         return filtered
 
     async def _finalize_or_fallback(self, state: AgentRunState, stop_reason: str) -> str:
+        """Attempt model finalization and degrade to a deterministic fallback if it yields nothing."""
         state.stop_reason = stop_reason
         self._trace(
             state,
@@ -425,6 +436,7 @@ class GraphAgent:
         return self._fallback_answer(state)
 
     def _fallback_answer(self, state: AgentRunState) -> str:
+        """Compose a best-effort answer from tool summaries and errors when the model gives none."""
         if state.tool_calls:
             summaries = [record.result.summary for record in state.tool_calls if record.result]
             errors = [
@@ -447,6 +459,7 @@ class GraphAgent:
         )
 
     def _trace(self, state: AgentRunState, event: str, message: str = "", **metadata: Any) -> None:
+        """Record a trace event, notify any stream consumer, and optionally log it."""
         trace_event = AgentTraceEvent(
             event=event,
             turn=state.turn,

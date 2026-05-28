@@ -27,6 +27,7 @@ class LiteLLMClient:
     """
 
     def __init__(self, settings: Settings) -> None:
+        """Store settings used to build LiteLLM completion requests."""
         self._settings = settings
 
     async def complete(
@@ -36,6 +37,7 @@ class LiteLLMClient:
         tools: list[dict[str, Any]] | None = None,
         tool_choice: str | dict[str, Any] | None = "auto",
     ) -> LLMResponse:
+        """Call LiteLLM for one completion, applying provider quirks and a retry workaround."""
         try:
             import litellm
         except ImportError as exc:
@@ -77,6 +79,7 @@ class LiteLLMClient:
         return self._normalize_response(raw)
 
     def _completion_kwargs(self, messages: list[dict[str, Any]]) -> dict[str, Any]:
+        """Assemble the base LiteLLM request kwargs from settings and messages."""
         kwargs: dict[str, Any] = {
             "model": self._settings.llm_model,
             "messages": messages,
@@ -107,6 +110,7 @@ class LiteLLMClient:
         return self._settings.llm_api_key_provider
 
     def _normalize_response(self, raw: Any) -> LLMResponse:
+        """Convert a raw LiteLLM response into the app's LLMResponse shape."""
         # The single place that reads a provider response. LiteLLM normalizes
         # every provider to the OpenAI shape (``choices[].message``), so we only
         # read that shape. ``_get`` bridges the two concrete forms it arrives
@@ -119,6 +123,7 @@ class LiteLLMClient:
         return LLMResponse(content=str(content), tool_calls=tool_calls, raw=raw)
 
     def _normalize_tool_call(self, raw: Any, index: int) -> LLMToolCall:
+        """Convert one raw tool call into an LLMToolCall, synthesizing an id if missing."""
         # LiteLLM guarantees the OpenAI tool-call shape: name and arguments live
         # under ``function``, so no top-level fallback is needed.
         call_id = self._get(raw, "id", None) or f"tool_call_{index + 1}"
@@ -129,6 +134,7 @@ class LiteLLMClient:
 
     @staticmethod
     def _parse_args(value: Any) -> dict[str, Any]:
+        """Coerce tool-call arguments (dict or JSON string) into a dict, defaulting to empty."""
         if isinstance(value, dict):
             return value
         if isinstance(value, str):
@@ -141,17 +147,20 @@ class LiteLLMClient:
 
     @staticmethod
     def _first_choice(raw: Any) -> Any:
+        """Return the first choice from a response, or an empty dict if none."""
         choices = LiteLLMClient._get(raw, "choices", []) or []
         return choices[0] if choices else {}
 
     @staticmethod
     def _get(obj: Any, key: str, default: Any = None) -> Any:
+        """Read a field from either a dict or an attribute object, bridging LiteLLM's two forms."""
         if isinstance(obj, dict):
             return obj.get(key, default)
         return getattr(obj, key, default)
 
 
 def _has_tool_history(messages: list[dict[str, Any]]) -> bool:
+    """Report whether the conversation already contains tool calls or results."""
     for message in messages:
         if message.get("role") == "tool":
             return True
@@ -161,6 +170,7 @@ def _has_tool_history(messages: list[dict[str, Any]]) -> bool:
 
 
 def _looks_like_missing_tools_error(exc: Exception) -> bool:
+    """Heuristically detect a provider error caused by tool history without a tools field."""
     text = str(exc).lower()
     if "tool" not in text:
         return False
@@ -169,6 +179,7 @@ def _looks_like_missing_tools_error(exc: Exception) -> bool:
 
 
 def _finalization_tool() -> dict[str, Any]:
+    """Return a placeholder tool schema that satisfies providers requiring tools with tool history."""
     return {
         "type": "function",
         "function": {

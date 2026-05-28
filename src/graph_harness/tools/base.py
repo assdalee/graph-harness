@@ -1,3 +1,5 @@
+"""Core tool abstractions: tool definitions and confirmation-gated argument models."""
+
 import inspect
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
@@ -11,6 +13,8 @@ ToolHandler = Callable[[BaseModel], Awaitable[Any] | Any]
 
 @dataclass(frozen=True)
 class ToolDefinition:
+    """Immutable description of a callable tool, its args schema, and safety metadata."""
+
     name: str
     description: str
     args_model: type[BaseModel]
@@ -38,6 +42,7 @@ class ToolDefinition:
         }
 
     async def invoke(self, args: dict[str, Any]) -> Any:
+        """Validate raw args against the model and run the handler, awaiting if async."""
         parsed = self.args_model.model_validate(args)
         result = self.handler(parsed)
         if inspect.isawaitable(result):
@@ -46,6 +51,8 @@ class ToolDefinition:
 
 
 class ConfirmableArgs(BaseModel):
+    """Base args for mutating tools that require explicit confirmation and an audit reason."""
+
     confirmed: bool = False
     reason: str | None = Field(
         default=None,
@@ -58,6 +65,7 @@ class ConfirmableArgs(BaseModel):
 
     @model_validator(mode="after")
     def require_audit_reason_when_confirmed(self) -> "ConfirmableArgs":
+        """Reject confirmed mutations that lack a reason, so every change is auditable."""
         if self.confirmed and not (self.reason or "").strip():
             raise ValueError("reason is required when confirmed=true")
         return self

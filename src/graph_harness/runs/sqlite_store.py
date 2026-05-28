@@ -1,3 +1,5 @@
+"""SQLite-backed run store implementation built on the stdlib sqlite3 module."""
+
 from __future__ import annotations
 
 import asyncio
@@ -86,11 +88,13 @@ class SqliteRunStore:
     """SQLite-backed RunStore. Blocking calls are wrapped in `asyncio.to_thread`."""
 
     def __init__(self, db_path: str) -> None:
+        """Store the database path and defer schema creation until first use."""
         self._db_path = db_path
         self._lock = asyncio.Lock()
         self._initialized = False
 
     async def _ensure_initialized(self) -> None:
+        """Create the schema once, guarding concurrent first-use with a lock."""
         if self._initialized:
             return
         async with self._lock:
@@ -100,6 +104,7 @@ class SqliteRunStore:
             self._initialized = True
 
     def _init_schema(self) -> None:
+        """Ensure the parent directory exists and apply the table/index schema."""
         directory = Path(self._db_path).expanduser().resolve().parent
         directory.mkdir(parents=True, exist_ok=True)
         with self._connect() as conn:
@@ -107,6 +112,7 @@ class SqliteRunStore:
             conn.commit()
 
     def _connect(self) -> sqlite3.Connection:
+        """Open a tuned connection with WAL, row access, and foreign keys enabled."""
         conn = sqlite3.connect(
             self._db_path,
             isolation_level=None,
@@ -120,6 +126,7 @@ class SqliteRunStore:
         return conn
 
     async def record(self, run: RunRecord) -> bool:
+        """Persist a run off-thread, swallowing failures so observability never breaks a request."""
         try:
             await self._ensure_initialized()
             await asyncio.to_thread(self._record_sync, run)
@@ -129,6 +136,7 @@ class SqliteRunStore:
             return False
 
     def _record_sync(self, run: RunRecord) -> None:
+        """Upsert the run and rewrite its child rows in a single transaction."""
         with self._connect() as conn:
             conn.execute("BEGIN")
             conn.execute(
@@ -230,10 +238,12 @@ class SqliteRunStore:
             conn.execute("COMMIT")
 
     async def get(self, run_id: str) -> RunRecord | None:
+        """Fetch a full run record by id off-thread."""
         await self._ensure_initialized()
         return await asyncio.to_thread(self._get_sync, run_id)
 
     def _get_sync(self, run_id: str) -> RunRecord | None:
+        """Read the run and its child rows, reassembling them into a RunRecord."""
         with self._connect() as conn:
             run_row = conn.execute("SELECT * FROM runs WHERE id = ?", (run_id,)).fetchone()
             if run_row is None:
@@ -253,10 +263,12 @@ class SqliteRunStore:
         return _record_from_rows(run_row, tool_rows, trace_rows, llm_rows)
 
     async def list(self, filters: RunListFilters) -> list[RunSummary]:
+        """Return matching run summaries, newest first, off-thread."""
         await self._ensure_initialized()
         return await asyncio.to_thread(self._list_sync, filters)
 
     def _list_sync(self, filters: RunListFilters) -> list[RunSummary]:
+        """Query summaries with the filters applied, clamping limit and offset to safe bounds."""
         sql, params = _build_where(filters)
         limit = max(1, min(filters.limit, 500))
         offset = max(0, filters.offset)
@@ -267,10 +279,12 @@ class SqliteRunStore:
         return [_summary_from_row(row) for row in rows]
 
     async def count(self, filters: RunListFilters) -> int:
+        """Return the total number of runs matching the filters off-thread."""
         await self._ensure_initialized()
         return await asyncio.to_thread(self._count_sync, filters)
 
     def _count_sync(self, filters: RunListFilters) -> int:
+        """Count runs matching the filters, ignoring limit and offset."""
         sql, params = _build_where(filters)
         query = f"SELECT COUNT(*) AS n FROM runs {sql}"
         with self._connect() as conn:
@@ -279,6 +293,7 @@ class SqliteRunStore:
 
 
 def _build_where(filters: RunListFilters) -> tuple[str, tuple[Any, ...]]:
+    """Build a parameterized WHERE clause and its bind values from the filters."""
     clauses: list[str] = []
     params: list[Any] = []
     if filters.status:
@@ -308,6 +323,7 @@ def _build_where(filters: RunListFilters) -> tuple[str, tuple[Any, ...]]:
 
 
 def _summary_from_row(row: sqlite3.Row) -> RunSummary:
+    """Map a runs table row to a RunSummary."""
     return RunSummary(
         id=row["id"],
         thread_id=row["thread_id"],
@@ -333,6 +349,7 @@ def _record_from_rows(
     trace_rows: list[sqlite3.Row],
     llm_rows: list[sqlite3.Row] | None = None,
 ) -> RunRecord:
+    """Reassemble a full RunRecord from its run row and ordered child rows."""
     return RunRecord(
         id=run_row["id"],
         thread_id=run_row["thread_id"],
@@ -386,20 +403,24 @@ def _record_from_rows(
 
 
 def _iso(value: datetime) -> str:
+    """Serialize a datetime to a UTC ISO string, treating naive values as UTC."""
     if value.tzinfo is None:
         value = value.replace(tzinfo=timezone.utc)
     return value.astimezone(timezone.utc).isoformat()
 
 
 def _parse_iso(value: str) -> datetime:
+    """Parse a stored ISO timestamp string back into a datetime."""
     return datetime.fromisoformat(value)
 
 
 def _json_path(key: str) -> str:
+    """Build a JSON path expression for a tag key, quoting it to allow arbitrary characters."""
     return "$." + json.dumps(key)
 
 
 def _loads(value: str | None, default: Any) -> Any:
+    """Decode a JSON column value, falling back to a default on null or malformed data."""
     if value is None:
         return default
     try:

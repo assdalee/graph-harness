@@ -1,3 +1,5 @@
+"""Declarative per-model capability profiles for provider-specific request shaping."""
+
 from __future__ import annotations
 
 from collections.abc import Callable
@@ -38,6 +40,7 @@ def _provider_of(model: str) -> str | None:
 
 
 def _is_anthropic_family(model: str) -> bool:
+    """Detect Anthropic-family models across providers via name heuristics and a provider probe."""
     # Native Anthropic (anthropic/claude-...), bare (claude-...), Bedrock
     # (bedrock/anthropic.claude-...), Vertex (vertex_ai/claude-...), and
     # OpenRouter (openrouter/anthropic/...) all surface the Anthropic quirk

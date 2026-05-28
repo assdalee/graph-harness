@@ -1,3 +1,4 @@
+"""No-credential in-memory Microsoft Graph backend for local harness testing."""
 from __future__ import annotations
 
 from typing import Any
@@ -5,6 +6,7 @@ class MockGraphClient:
     """Deterministic in-memory Microsoft Graph stand-in for local harness testing."""
 
     def __init__(self) -> None:
+        """Seed fixed in-memory directory, security, and identity fixtures."""
         self.users = [
             {
                 "id": "user-ada",
@@ -91,6 +93,7 @@ class MockGraphClient:
         params: dict[str, Any] | None = None,
         api_version: str | None = None,
     ) -> Any:
+        """Route a request to the matching fixture handler, mimicking Graph responses."""
         method = method.upper()
         endpoint = endpoint if endpoint.startswith("/") else f"/{endpoint}"
         params = params or {}
@@ -142,9 +145,11 @@ class MockGraphClient:
         all_pages: bool = False,
         max_pages: int = 1,
     ) -> Any:
+        """Return a single page; the mock never paginates so paging args are ignored."""
         return await self.request("GET", endpoint, params=params, api_version=api_version)
 
     def _filter_entities(self, entities: list[dict[str, Any]], params: dict[str, Any]) -> list[dict[str, Any]] | dict[str, Any]:
+        """Match entities by quoted filter term, with magic terms to simulate rate limits and errors."""
         filter_expr = str(params.get("$filter") or "")
         if "ratelimit" in filter_expr.lower():
             return {
@@ -172,6 +177,7 @@ class MockGraphClient:
         return self._top(filtered, params)
 
     def _filter_alerts(self, params: dict[str, Any]) -> list[dict[str, Any]] | dict[str, Any]:
+        """Filter security alerts by severity/status, returning a 400 for unsupported properties."""
         filter_expr = str(params.get("$filter") or "")
         if "badUnsupported" in filter_expr or "unsupported" in filter_expr.lower():
             return {
@@ -189,6 +195,7 @@ class MockGraphClient:
         return self._top(filtered, params)
 
     def _filter_sign_ins(self, params: dict[str, Any]) -> list[dict[str, Any]]:
+        """Filter sign-in logs by error code and quoted user principal name."""
         filter_expr = str(params.get("$filter") or "")
         filtered = self.sign_ins
         if "status/errorCode eq 50126" in filter_expr:
@@ -200,6 +207,7 @@ class MockGraphClient:
         return self._top(filtered, params)
 
     def _filter_oauth_grants(self, params: dict[str, Any]) -> list[dict[str, Any]]:
+        """Filter OAuth permission grants by clientId and consentType."""
         filter_expr = str(params.get("$filter") or "")
         filtered = self.oauth_grants
         quoted = self._quoted_values(filter_expr)
@@ -210,6 +218,7 @@ class MockGraphClient:
         return self._top(filtered, params)
 
     def _get_by_identifier(self, entities: list[dict[str, Any]], identifier: str) -> Any:
+        """Look up one entity by id, UPN, mail, or nickname, returning a 404 error if absent."""
         for item in entities:
             if identifier in {
                 item.get("id"),
@@ -228,6 +237,7 @@ class MockGraphClient:
 
     @staticmethod
     def _quoted_values(filter_expr: str) -> list[str]:
+        """Extract single-quoted literals from an OData filter expression."""
         values: list[str] = []
         parts = filter_expr.split("'")
         for index in range(1, len(parts), 2):
@@ -236,6 +246,7 @@ class MockGraphClient:
 
     @staticmethod
     def _top(items: list[dict[str, Any]], params: dict[str, Any]) -> list[dict[str, Any]]:
+        """Apply an $top limit, ignoring malformed values."""
         top = params.get("$top")
         try:
             return items[: int(top)] if top else items

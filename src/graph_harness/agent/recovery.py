@@ -1,3 +1,5 @@
+"""Map typed tool errors to a recovery directive: one constrained retry or a finalize instruction."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -14,6 +16,8 @@ RecoveryAction = Literal["continue", "finalize"]
 
 @dataclass(frozen=True)
 class RecoveryDirective:
+    """Instruction telling the loop to continue with a retry or to finalize, plus its rationale."""
+
     action: RecoveryAction
     message: str
     stop_reason: str
@@ -43,6 +47,7 @@ class ErrorRecoveryPolicy:
     }
 
     def __init__(self, settings: Settings) -> None:
+        """Store settings governing retry budgets per error key."""
         self._settings = settings
 
     def evaluate(
@@ -50,6 +55,7 @@ class ErrorRecoveryPolicy:
         records: list[ToolCallRecord],
         state: AgentRunState,
     ) -> RecoveryDirective | None:
+        """Pick a directive: finalize on terminal errors, retry retryable ones within budget."""
         error_records = [record for record in records if record.error]
         if not error_records:
             return None
@@ -79,6 +85,7 @@ class ErrorRecoveryPolicy:
         return self._finalize_directive(error_records[0])
 
     def _retry_directive(self, record: ToolCallRecord, attempt: int) -> RecoveryDirective:
+        """Build a continue directive with code-specific guidance for one corrected retry."""
         assert record.error is not None
         code = record.error.code
         guidance = {
@@ -122,6 +129,7 @@ class ErrorRecoveryPolicy:
         )
 
     def _finalize_directive(self, record: ToolCallRecord) -> RecoveryDirective:
+        """Build a finalize directive that asks the model to explain the error to the user."""
         return RecoveryDirective(
             action="finalize",
             message=self._finalize_message(record),
@@ -133,6 +141,7 @@ class ErrorRecoveryPolicy:
         )
 
     def _finalize_message(self, record: ToolCallRecord) -> str:
+        """Compose the no-more-tools instruction with code-specific user-facing guidance."""
         if record.error is None:
             return "Explain that tool execution failed and no typed error was available."
 
@@ -159,6 +168,7 @@ class ErrorRecoveryPolicy:
 
     @staticmethod
     def _attempt_key(record: ToolCallRecord) -> str:
+        """Derive a per-tool-and-error key so retry budgets are tracked independently."""
         code = record.error.code if record.error else "unknown"
         return f"{record.name}:{code}"
 

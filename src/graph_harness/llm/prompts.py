@@ -1,3 +1,5 @@
+"""System and finalization prompt strings for the Microsoft Graph agent."""
+
 GRAPH_AGENT_SYSTEM_PROMPT = """You are a Microsoft Graph operations assistant.
 
 Use tools to answer questions about Microsoft 365, Entra ID, security, devices, groups, and users.

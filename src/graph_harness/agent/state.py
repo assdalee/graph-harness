@@ -1,3 +1,5 @@
+"""Hold the mutable per-run state threaded through a single agent invocation."""
+
 from collections.abc import Callable
 from typing import Any
 
@@ -7,6 +9,8 @@ from graph_harness.api_models.chat import AgentTraceEvent, LLMCallRecord, ToolCa
 
 
 class AgentRunState(BaseModel):
+    """Accumulate messages, tool results, trace events, and stop bookkeeping for one run."""
+
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
     messages: list[dict[str, Any]]
