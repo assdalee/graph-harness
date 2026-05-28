@@ -25,8 +25,11 @@ class Settings(BaseModel):
     llm_api_key_provider: str | None = None
     openrouter_api_key: str | None = None
     litellm_api_base: str | None = None
+    litellm_temperature: float | None = None
     litellm_max_tokens: int = 2048
     litellm_timeout_seconds: float = 60
+    # Override the model-profile tool-history quirk (None = auto-detect by family).
+    llm_requires_tools_with_tool_history: bool | None = None
 
     graph_tenant_id: str = ""
     graph_backend: str = "live"
@@ -150,8 +153,12 @@ class Settings(BaseModel):
             or _get_optional_str("LLM_API_KEY_PROVIDER"),
             openrouter_api_key=_get_optional_str("OPENROUTER_API_KEY"),
             litellm_api_base=_get_optional_str("LITELLM_API_BASE"),
+            litellm_temperature=_get_optional_float("LITELLM_TEMPERATURE"),
             litellm_max_tokens=_get_int("LITELLM_MAX_TOKENS", 2048),
             litellm_timeout_seconds=_get_float("LITELLM_TIMEOUT_SECONDS", 60),
+            llm_requires_tools_with_tool_history=_get_optional_bool(
+                "LLM_REQUIRES_TOOLS_WITH_TOOL_HISTORY"
+            ),
             graph_tenant_id=_get_str("GRAPH_TENANT_ID", ""),
             graph_backend=_get_str("GRAPH_BACKEND", cls.model_fields["graph_backend"].default),
             graph_client_id=_get_str("GRAPH_CLIENT_ID", ""),
@@ -224,3 +231,20 @@ def _get_bool(name: str, default: bool) -> bool:
     if value is None:
         return default
     return value.strip().lower() in {"1", "true", "yes", "y", "on"}
+
+
+def _get_optional_bool(name: str) -> bool | None:
+    value = os.getenv(name)
+    if value is None or not value.strip():
+        return None
+    return value.strip().lower() in {"1", "true", "yes", "y", "on"}
+
+
+def _get_optional_float(name: str) -> float | None:
+    value = os.getenv(name)
+    if value is None or not value.strip():
+        return None
+    try:
+        return float(value)
+    except ValueError:
+        return None

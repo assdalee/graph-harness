@@ -2,6 +2,7 @@ import json
 from typing import Any
 
 from graph_harness.core.config import Settings
+from graph_harness.llm.profiles import resolve_profile
 from graph_harness.llm.types import LLMResponse, LLMToolCall
 
 
@@ -29,17 +30,36 @@ class LiteLLMClient:
                 "`pip install -e .` or `pip install litellm`."
             ) from exc
 
+        profile = resolve_profile(
+            self._settings.llm_model,
+            override=self._settings.llm_requires_tools_with_tool_history,
+        )
+
         kwargs = self._completion_kwargs(messages)
         if tools is not None:
             kwargs["tools"] = tools
             kwargs["tool_choice"] = tool_choice
-        elif _model_requires_tools_for_tool_history(self._settings.llm_model) and _has_tool_history(
-            messages
-        ):
-            kwargs["tools"] = [_anthropic_finalization_tool()]
+        elif profile.requires_tools_with_tool_history and _has_tool_history(messages):
+            kwargs["tools"] = [_finalization_tool()]
             kwargs["tool_choice"] = "none"
 
-        raw = await litellm.acompletion(**kwargs)
+        try:
+            raw = await litellm.acompletion(**kwargs)
+        except Exception as exc:
+            # Safety net for the long tail: if a provider rejects a tool-history
+            # request for lack of a tools field and our profile did not already
+            # adapt, apply the workaround once and retry. This self-heals models
+            # the registry does not yet know about.
+            if (
+                "tools" not in kwargs
+                and _has_tool_history(messages)
+                and _looks_like_missing_tools_error(exc)
+            ):
+                kwargs["tools"] = [_finalization_tool()]
+                kwargs["tool_choice"] = "none"
+                raw = await litellm.acompletion(**kwargs)
+            else:
+                raise
         return self._normalize_response(raw)
 
     def _completion_kwargs(self, messages: list[dict[str, Any]]) -> dict[str, Any]:
@@ -48,7 +68,12 @@ class LiteLLMClient:
             "messages": messages,
             "max_tokens": self._settings.litellm_max_tokens,
             "timeout": self._settings.litellm_timeout_seconds,
+            # Let LiteLLM strip params (e.g. temperature) for models that reject
+            # them, instead of us blanket-dropping them for every model.
+            "drop_params": True,
         }
+        if self._settings.litellm_temperature is not None:
+            kwargs["temperature"] = self._settings.litellm_temperature
         if self._settings.litellm_api_base:
             kwargs["api_base"] = self._settings.litellm_api_base
         resolved_key = self._resolve_provider_api_key()
@@ -107,11 +132,6 @@ class LiteLLMClient:
         return getattr(obj, key, default)
 
 
-def _model_requires_tools_for_tool_history(model: str) -> bool:
-    normalized = (model or "").strip().lower()
-    return "anthropic/" in normalized or "claude-" in normalized
-
-
 def _has_tool_history(messages: list[dict[str, Any]]) -> bool:
     for message in messages:
         if message.get("role") == "tool":
@@ -121,7 +141,15 @@ def _has_tool_history(messages: list[dict[str, Any]]) -> bool:
     return False
 
 
-def _anthropic_finalization_tool() -> dict[str, Any]:
+def _looks_like_missing_tools_error(exc: Exception) -> bool:
+    text = str(exc).lower()
+    if "tool" not in text:
+        return False
+    signals = ("tool_use", "tool_result", "tools` is", "tools field", "tools is required", "no tools")
+    return any(signal in text for signal in signals) or ("tools" in text and "required" in text)
+
+
+def _finalization_tool() -> dict[str, Any]:
     return {
         "type": "function",
         "function": {
