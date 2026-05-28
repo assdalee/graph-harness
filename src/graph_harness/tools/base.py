@@ -23,6 +23,11 @@ class ToolDefinition:
     tags: tuple[str, ...] = ()
 
     def to_openai_tool(self) -> dict[str, Any]:
+        """The universal function-tool schema LiteLLM accepts for every provider.
+
+        Named for the OpenAI shape it follows; it is not OpenAI-specific —
+        LiteLLM maps it to each provider, so there is no ``to_<provider>_tool``.
+        """
         return {
             "type": "function",
             "function": {

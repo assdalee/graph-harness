@@ -1,3 +1,17 @@
+"""LiteLLM adapter — the single provider boundary.
+
+The rest of the app speaks exactly one message format: LiteLLM's
+OpenAI-compatible chat format (a list of ``{"role", "content", ...}`` dicts,
+with tool calls under ``tool_calls[].function`` and tool results as
+``{"role": "tool", ...}`` messages). LiteLLM translates that to and from each
+underlying provider's wire format (Anthropic, Gemini, Bedrock, Ollama, ...),
+so the app never builds provider-specific payloads itself.
+
+Keep all provider-specific request shaping here and in ``profiles.py``. Do not
+add per-provider branches elsewhere, and do not add a second message
+converter — LiteLLM already is that layer.
+"""
+
 import json
 from typing import Any
 
