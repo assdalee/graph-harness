@@ -1143,6 +1143,142 @@ details > summary:focus-visible {
   text-align: center;
 }
 
+/* Loop prompt context -------------------------------------------------- */
+
+.context-section {
+  flex: 1;
+  min-height: 120px;
+}
+
+.context-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 0;
+  padding: 10px;
+  overflow: auto;
+  scrollbar-width: thin;
+}
+
+.context-call {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  transition: border-color 120ms ease;
+}
+
+.context-call:hover {
+  border-color: var(--border-strong);
+}
+
+.context-call[open] {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-ring);
+}
+
+.context-call summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 38px;
+  padding: 8px 12px;
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+}
+
+.context-call summary::-webkit-details-marker {
+  display: none;
+}
+
+.context-call summary::before {
+  content: "";
+  display: inline-block;
+  width: 0;
+  height: 0;
+  margin-right: 2px;
+  border-style: solid;
+  border-width: 4px 0 4px 5px;
+  border-color: transparent transparent transparent var(--text-subtle);
+  transition: transform 120ms ease;
+}
+
+.context-call[open] summary::before {
+  transform: rotate(90deg);
+}
+
+.context-call summary span {
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.context-call summary small {
+  margin-left: auto;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.context-meta {
+  display: flex;
+  gap: 6px;
+  padding: 0 12px 8px;
+}
+
+.prompt-messages {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 0 10px 10px;
+}
+
+.prompt-message {
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--bg-sunken);
+  overflow: hidden;
+}
+
+.prompt-message.prompt-system {
+  border-left-color: var(--info);
+}
+.prompt-message.prompt-user {
+  border-left-color: var(--accent);
+}
+.prompt-message.prompt-assistant {
+  border-left-color: var(--success);
+}
+.prompt-message.prompt-tool {
+  border-left-color: var(--warning);
+}
+
+.prompt-role {
+  display: block;
+  padding: 6px 10px 0;
+  color: var(--text-muted);
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.prompt-content {
+  max-height: 260px;
+  margin: 6px 0 0;
+  padding: 8px 10px;
+  overflow: auto;
+  border-top: 1px solid var(--border);
+  color: var(--text);
+  background: var(--surface);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+  scrollbar-width: thin;
+}
+
 /* Responsive ----------------------------------------------------------- */
 
 @media (max-width: 1180px) {

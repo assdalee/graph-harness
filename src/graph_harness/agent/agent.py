@@ -1,3 +1,4 @@
+import copy
 import json
 import logging
 import time
@@ -8,7 +9,7 @@ from graph_harness.agent.clarification import ClarificationPolicy
 from graph_harness.agent.compaction import ContextCompactor
 from graph_harness.agent.recovery import ErrorRecoveryPolicy
 from graph_harness.agent.state import AgentRunState
-from graph_harness.api_models.chat import AgentTraceEvent, ChatResponse
+from graph_harness.api_models.chat import AgentTraceEvent, ChatResponse, LLMCallRecord
 from graph_harness.core.config import Settings
 from graph_harness.llm.client import LiteLLMClient
 from graph_harness.llm.prompts import FINAL_RESPONSE_INSTRUCTION, GRAPH_AGENT_SYSTEM_PROMPT
@@ -83,6 +84,7 @@ class GraphAgent:
                 state,
                 tools=[tool.to_openai_tool() for tool in selected_tools],
                 tool_choice="auto",
+                capture_phase="turn",
             )
             if response is None:
                 answer = self._fallback_answer(state)
@@ -246,6 +248,7 @@ class GraphAgent:
             messages=state.messages,
             warnings=state.warnings,
             trace_events=state.trace_events,
+            llm_calls=state.llm_calls,
         )
 
     def _initial_messages(self, messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -316,10 +319,21 @@ class GraphAgent:
         tools: list[dict[str, Any]] | None,
         tool_choice: str | dict[str, Any] | None,
         messages: list[dict[str, Any]] | None = None,
+        capture_phase: str | None = None,
     ) -> LLMResponse | None:
         attempts = self._settings.agent_llm_retries + 1
         source_messages = messages or state.messages
         llm_messages, compacted = self._context_compactor.compact(source_messages)
+        if capture_phase is not None:
+            state.llm_calls.append(
+                LLMCallRecord(
+                    turn=state.turn,
+                    phase=capture_phase,
+                    compacted=compacted,
+                    tool_count=len(tools or []),
+                    messages=copy.deepcopy(llm_messages),
+                )
+            )
         if compacted:
             self._trace(
                 state,

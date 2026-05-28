@@ -5,7 +5,7 @@ from typing import Any, Protocol
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from graph_harness.api_models.chat import AgentTraceEvent, ToolCallRecord
+from graph_harness.api_models.chat import AgentTraceEvent, LLMCallRecord, ToolCallRecord
 
 
 class RunSummary(BaseModel):
@@ -49,6 +49,7 @@ class RunRecord(BaseModel):
     messages: list[dict[str, Any]] = Field(default_factory=list)
     tool_calls: list[ToolCallRecord] = Field(default_factory=list)
     trace_events: list[AgentTraceEvent] = Field(default_factory=list)
+    llm_calls: list[LLMCallRecord] = Field(default_factory=list)
     config_snapshot: dict[str, Any] = Field(default_factory=dict)
     tags: dict[str, Any] = Field(default_factory=dict)
 

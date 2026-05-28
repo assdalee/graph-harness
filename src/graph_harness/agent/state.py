@@ -3,7 +3,7 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from graph_harness.api_models.chat import AgentTraceEvent, ToolCallRecord
+from graph_harness.api_models.chat import AgentTraceEvent, LLMCallRecord, ToolCallRecord
 
 
 class AgentRunState(BaseModel):
@@ -17,6 +17,7 @@ class AgentRunState(BaseModel):
     status: str = "running"
     warnings: list[str] = Field(default_factory=list)
     trace_events: list[AgentTraceEvent] = Field(default_factory=list)
+    llm_calls: list[LLMCallRecord] = Field(default_factory=list)
     empty_response_count: int = 0
     recovery_attempts: dict[str, int] = Field(default_factory=dict)
     on_event: Callable[[AgentTraceEvent], None] | None = Field(

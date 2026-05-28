@@ -68,6 +68,17 @@ CREATE TABLE IF NOT EXISTS trace_events (
 );
 
 CREATE INDEX IF NOT EXISTS idx_trace_events_event ON trace_events(event);
+
+CREATE TABLE IF NOT EXISTS llm_calls (
+  run_id TEXT NOT NULL REFERENCES runs(id) ON DELETE CASCADE,
+  ordinal INTEGER NOT NULL,
+  turn INTEGER NOT NULL DEFAULT 0,
+  phase TEXT NOT NULL DEFAULT 'turn',
+  compacted INTEGER NOT NULL DEFAULT 0,
+  tool_count INTEGER NOT NULL DEFAULT 0,
+  messages TEXT NOT NULL DEFAULT '[]',
+  PRIMARY KEY (run_id, ordinal)
+);
 """
 
 
@@ -154,6 +165,7 @@ class SqliteRunStore:
             )
             conn.execute("DELETE FROM tool_calls WHERE run_id = ?", (run.id,))
             conn.execute("DELETE FROM trace_events WHERE run_id = ?", (run.id,))
+            conn.execute("DELETE FROM llm_calls WHERE run_id = ?", (run.id,))
             conn.executemany(
                 """
                 INSERT INTO tool_calls (
@@ -196,6 +208,25 @@ class SqliteRunStore:
                     for ordinal, event in enumerate(run.trace_events)
                 ],
             )
+            conn.executemany(
+                """
+                INSERT INTO llm_calls (
+                  run_id, ordinal, turn, phase, compacted, tool_count, messages
+                ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                [
+                    (
+                        run.id,
+                        ordinal,
+                        call.turn,
+                        call.phase,
+                        1 if call.compacted else 0,
+                        call.tool_count,
+                        json.dumps(call.messages, default=str),
+                    )
+                    for ordinal, call in enumerate(run.llm_calls)
+                ],
+            )
             conn.execute("COMMIT")
 
     async def get(self, run_id: str) -> RunRecord | None:
@@ -215,7 +246,11 @@ class SqliteRunStore:
                 "SELECT * FROM trace_events WHERE run_id = ? ORDER BY ordinal",
                 (run_id,),
             ).fetchall()
-        return _record_from_rows(run_row, tool_rows, trace_rows)
+            llm_rows = conn.execute(
+                "SELECT * FROM llm_calls WHERE run_id = ? ORDER BY ordinal",
+                (run_id,),
+            ).fetchall()
+        return _record_from_rows(run_row, tool_rows, trace_rows, llm_rows)
 
     async def list(self, filters: RunListFilters) -> list[RunSummary]:
         await self._ensure_initialized()
@@ -296,6 +331,7 @@ def _record_from_rows(
     run_row: sqlite3.Row,
     tool_rows: list[sqlite3.Row],
     trace_rows: list[sqlite3.Row],
+    llm_rows: list[sqlite3.Row] | None = None,
 ) -> RunRecord:
     return RunRecord(
         id=run_row["id"],
@@ -333,6 +369,16 @@ def _record_from_rows(
                 "metadata": _loads(row["metadata"], {}),
             }
             for row in trace_rows
+        ],
+        llm_calls=[
+            {
+                "turn": row["turn"],
+                "phase": row["phase"],
+                "compacted": bool(row["compacted"]),
+                "tool_count": row["tool_count"],
+                "messages": _loads(row["messages"], []),
+            }
+            for row in (llm_rows or [])
         ],
         config_snapshot=_loads(run_row["config_snapshot"], {}),
         tags=_loads(run_row["tags"], {}),

@@ -61,6 +61,16 @@ class AgentTraceEvent(BaseModel):
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 
+class LLMCallRecord(BaseModel):
+    """The exact constructed prompt sent to the model on one agent loop call."""
+
+    turn: int = 0
+    phase: str = "turn"
+    compacted: bool = False
+    tool_count: int = 0
+    messages: list[dict[str, Any]] = Field(default_factory=list)
+
+
 class ChatResponse(BaseModel):
     thread_id: str | None = None
     run_id: str | None = None
@@ -73,6 +83,7 @@ class ChatResponse(BaseModel):
     messages: list[dict[str, Any]] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)
     trace_events: list[AgentTraceEvent] = Field(default_factory=list)
+    llm_calls: list[LLMCallRecord] = Field(default_factory=list)
 
 
 class StreamTraceEvent(BaseModel):

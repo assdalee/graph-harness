@@ -60,6 +60,7 @@ class ChatService:
             messages=list(response.messages),
             tool_calls=list(response.tool_calls),
             trace_events=list(response.trace_events),
+            llm_calls=list(response.llm_calls),
             config_snapshot=_config_snapshot(self._settings),
             tags=dict(request.tags or {}),
         )

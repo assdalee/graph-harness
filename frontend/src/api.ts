@@ -49,6 +49,14 @@ export type AgentTraceEvent = {
   metadata: Record<string, unknown>;
 };
 
+export type LLMCallRecord = {
+  turn: number;
+  phase: string;
+  compacted: boolean;
+  tool_count: number;
+  messages: Array<Record<string, unknown>>;
+};
+
 export type ChatResponse = {
   thread_id: string | null;
   run_id: string | null;
@@ -61,6 +69,7 @@ export type ChatResponse = {
   messages: Array<Record<string, unknown>>;
   warnings: string[];
   trace_events: AgentTraceEvent[];
+  llm_calls: LLMCallRecord[];
 };
 
 export type RunSummary = {

@@ -14,6 +14,7 @@ import {
   Users,
   Bell,
   KeySquare,
+  Layers,
   UserSearch,
   Wrench,
   X,
@@ -24,6 +25,7 @@ import {
   AgentTraceEvent,
   ChatMessage,
   ChatResponse,
+  LLMCallRecord,
   OperationSummary,
   RunSummary as RunRow,
   getHealth,
@@ -165,6 +167,7 @@ export function App() {
         messages: record.messages,
         warnings: record.warnings,
         trace_events: record.trace_events,
+        llm_calls: record.llm_calls ?? [],
       };
       setSelectedResponse(synthetic);
       setMessages([
@@ -349,6 +352,7 @@ export function App() {
 
       <aside className="inspector">
         <RunSummary response={latestResponse} />
+        <ContextCalls calls={latestResponse?.llm_calls ?? []} />
         <ToolTimeline response={latestResponse} />
         <TraceTable events={latestResponse?.trace_events ?? []} />
       </aside>
@@ -567,5 +571,58 @@ function TraceTable({ events }: { events: AgentTraceEvent[] }) {
         <div className="placeholder">No trace events</div>
       )}
     </section>
+  );
+}
+
+function ContextCalls({ calls }: { calls: LLMCallRecord[] }) {
+  return (
+    <section className="inspector-section context-section">
+      <div className="section-heading">
+        <Layers size={16} aria-hidden="true" />
+        <span>Loop prompts</span>
+        {calls.length ? <strong>{calls.length}</strong> : null}
+      </div>
+      {calls.length ? (
+        <div className="context-list">
+          {calls.map((call, index) => (
+            <details key={index} className="context-call">
+              <summary>
+                <span>Loop {call.turn} Call</span>
+                <small>
+                  {call.messages.length} msg{call.messages.length === 1 ? "" : "s"}
+                </small>
+              </summary>
+              <div className="context-meta">
+                <span className="tag tag-read">{call.tool_count} tools</span>
+                {call.compacted ? <span className="tag tag-write">compacted</span> : null}
+              </div>
+              <div className="prompt-messages">
+                {call.messages.map((message, messageIndex) => (
+                  <PromptMessage key={messageIndex} message={message} />
+                ))}
+              </div>
+            </details>
+          ))}
+        </div>
+      ) : (
+        <div className="placeholder">No loop calls</div>
+      )}
+    </section>
+  );
+}
+
+function PromptMessage({ message }: { message: Record<string, unknown> }) {
+  const role = String(message.role ?? "unknown");
+  const name = typeof message.name === "string" ? message.name : null;
+  const content = typeof message.content === "string" ? message.content : "";
+  const toolCalls = Array.isArray(message.tool_calls) ? message.tool_calls : null;
+  return (
+    <div className={`prompt-message prompt-${role}`}>
+      <span className="prompt-role">{name ? `${role} · ${name}` : role}</span>
+      {content ? <pre className="prompt-content">{content}</pre> : null}
+      {toolCalls && toolCalls.length ? (
+        <pre className="prompt-content">{JSON.stringify(toolCalls, null, 2)}</pre>
+      ) : null}
+    </div>
   );
 }
