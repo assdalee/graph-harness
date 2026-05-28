@@ -107,6 +107,10 @@ class LiteLLMClient:
         return self._settings.llm_api_key_provider
 
     def _normalize_response(self, raw: Any) -> LLMResponse:
+        # The single place that reads a provider response. LiteLLM normalizes
+        # every provider to the OpenAI shape (``choices[].message``), so we only
+        # read that shape. ``_get`` bridges the two concrete forms it arrives
+        # in: typed objects from LiteLLM at runtime, plain dicts in tests.
         choice = self._first_choice(raw)
         message = self._get(choice, "message", {}) or {}
         content = self._get(message, "content", "") or ""
@@ -115,11 +119,12 @@ class LiteLLMClient:
         return LLMResponse(content=str(content), tool_calls=tool_calls, raw=raw)
 
     def _normalize_tool_call(self, raw: Any, index: int) -> LLMToolCall:
+        # LiteLLM guarantees the OpenAI tool-call shape: name and arguments live
+        # under ``function``, so no top-level fallback is needed.
         call_id = self._get(raw, "id", None) or f"tool_call_{index + 1}"
         function = self._get(raw, "function", {}) or {}
-        name = self._get(function, "name", "") or self._get(raw, "name", "")
-        args_raw = self._get(function, "arguments", {}) or self._get(raw, "arguments", {})
-        args = self._parse_args(args_raw)
+        name = self._get(function, "name", "")
+        args = self._parse_args(self._get(function, "arguments", {}))
         return LLMToolCall(id=str(call_id), name=str(name), args=args)
 
     @staticmethod

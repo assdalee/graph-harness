@@ -138,3 +138,30 @@ async def test_no_retry_when_workaround_already_applied(monkeypatch) -> None:
     with pytest.raises(RuntimeError):
         await client.complete(messages=TOOL_HISTORY, tools=None, tool_choice=None)
     assert len(calls) == 1
+
+
+# --- Response normalization: relies on LiteLLM's OpenAI-shaped output --------
+
+
+def test_normalize_reads_openai_tool_call_shape() -> None:
+    client = LiteLLMClient(Settings(llm_model="openai/gpt-4o-mini"))
+    raw = {
+        "choices": [
+            {
+                "message": {
+                    "content": "ok",
+                    "tool_calls": [
+                        {
+                            "id": "call-1",
+                            "type": "function",
+                            "function": {"name": "list_users", "arguments": '{"top": 5}'},
+                        }
+                    ],
+                }
+            }
+        ]
+    }
+    response = client._normalize_response(raw)
+    assert response.content == "ok"
+    assert response.tool_calls[0].name == "list_users"
+    assert response.tool_calls[0].args == {"top": 5}
