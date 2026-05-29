@@ -81,6 +81,58 @@ class MockGraphClient:
                 "scope": "Mail.Read Files.Read.All",
             }
         ]
+        self.directory_roles = [
+            {
+                "id": "role-ga",
+                "displayName": "Global Administrator",
+                "roleTemplateId": "62e90394-69f5-4237-9190-012177145e10",
+            },
+            {
+                "id": "role-helpdesk",
+                "displayName": "Helpdesk Administrator",
+                "roleTemplateId": "729827e3-9c14-49f7-bb1b-9608f156bbb8",
+            },
+        ]
+        self.role_definitions = [
+            {"id": "def-ga", "displayName": "Global Administrator", "isBuiltIn": True},
+            {"id": "def-reader", "displayName": "Global Reader", "isBuiltIn": True},
+        ]
+        self.role_assignments = [
+            {
+                "id": "ra-1",
+                "principalId": "user-ada",
+                "roleDefinitionId": "def-reader",
+                "directoryScopeId": "/",
+            }
+        ]
+        self.conditional_access_policies = [
+            {"id": "ca-1", "displayName": "Require MFA for admins", "state": "enabled"},
+            {
+                "id": "ca-2",
+                "displayName": "Block legacy authentication",
+                "state": "enabledForReportingButNotEnforced",
+            },
+        ]
+        self.subscribed_skus = [
+            {
+                "id": "sku-e5",
+                "skuId": "sku-e5-id",
+                "skuPartNumber": "ENTERPRISEPREMIUM",
+                "prepaidUnits": {"enabled": 100},
+                "consumedUnits": 42,
+            }
+        ]
+        self.license_details = [
+            {"id": "lic-e5", "skuId": "sku-e5-id", "skuPartNumber": "ENTERPRISEPREMIUM"}
+        ]
+        self.applications = [
+            {
+                "id": "app-obj-1",
+                "appId": "11111111-1111-1111-1111-111111111111",
+                "displayName": "Internal API",
+                "signInAudience": "AzureADMyOrg",
+            }
+        ]
 
     async def request(
         self,
@@ -94,6 +146,34 @@ class MockGraphClient:
         method = method.upper()
         endpoint = endpoint if endpoint.startswith("/") else f"/{endpoint}"
         params = params or {}
+
+        if method == "GET" and endpoint == "/directoryRoles":
+            return {"value": self._top(self.directory_roles, params)}
+        if method == "GET" and endpoint == "/roleManagement/directory/roleDefinitions":
+            return {"value": self._top(self.role_definitions, params)}
+        if method == "GET" and endpoint == "/roleManagement/directory/roleAssignments":
+            return {"value": self._top(self.role_assignments, params)}
+        if method == "GET" and endpoint == "/identity/conditionalAccess/policies":
+            return {"value": self._top(self.conditional_access_policies, params)}
+        if method == "GET" and endpoint.startswith("/identity/conditionalAccess/policies/"):
+            return self._get_by_identifier(
+                self.conditional_access_policies,
+                endpoint.removeprefix("/identity/conditionalAccess/policies/"),
+            )
+        if method == "GET" and endpoint == "/subscribedSkus":
+            return {"value": self._top(self.subscribed_skus, params)}
+        if (
+            method == "GET"
+            and endpoint.startswith("/users/")
+            and endpoint.endswith("/licenseDetails")
+        ):
+            return {"value": self.license_details}
+        if method == "GET" and endpoint == "/applications":
+            return {"value": self._top(self.applications, params)}
+        if method == "GET" and endpoint.startswith("/applications/"):
+            return self._get_by_identifier(
+                self.applications, endpoint.removeprefix("/applications/")
+            )
 
         if method == "GET" and endpoint == "/users":
             result = self._filter_entities(self.users, params)

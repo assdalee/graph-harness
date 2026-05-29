@@ -157,6 +157,75 @@ class GenericGraphOperationArgs(ConfirmableArgs):
     api_version: str | None = None
 
 
+# --- Identity & access governance ------------------------------------------
+
+ConditionalAccessState = Literal["enabled", "disabled", "enabledForReportingButNotEnforced"]
+
+
+class ListRoleAssignmentsArgs(PaginationArgs):
+    principal_id: str | None = Field(
+        default=None, description="Filter by principal (user/group/SP) object ID."
+    )
+    role_definition_id: str | None = Field(
+        default=None, description="Filter by role definition ID."
+    )
+
+
+class AssignDirectoryRoleArgs(ConfirmableArgs):
+    principal_id: str = Field(description="Object ID of the user, group, or service principal.")
+    role_definition_id: str = Field(
+        description="Directory role definition (or template) ID to grant."
+    )
+    directory_scope_id: str = Field(
+        default="/", description="Assignment scope; '/' is tenant-wide."
+    )
+
+
+class RemoveRoleAssignmentArgs(ConfirmableArgs):
+    assignment_id: str = Field(description="unifiedRoleAssignment ID to delete.")
+
+
+class GetConditionalAccessPolicyArgs(BaseModel):
+    policy_id: str = Field(description="Conditional Access policy object ID.")
+
+
+class SetConditionalAccessPolicyStateArgs(ConfirmableArgs):
+    policy_id: str = Field(description="Conditional Access policy object ID.")
+    state: ConditionalAccessState = Field(description="Target enforcement state.")
+
+
+class GetUserLicenseDetailsArgs(BaseModel):
+    user_id: str = Field(description="User object ID or userPrincipalName.")
+
+
+class AssignUserLicenseArgs(ConfirmableArgs):
+    user_id: str = Field(description="User object ID or userPrincipalName.")
+    add_sku_ids: list[str] = Field(default_factory=list, description="SKU IDs to assign.")
+    remove_sku_ids: list[str] = Field(default_factory=list, description="SKU IDs to remove.")
+    disabled_plans: list[str] | None = Field(
+        default=None, description="Service plan IDs to disable on the added SKUs."
+    )
+
+
+class ListApplicationsArgs(PaginationArgs):
+    display_name: str | None = None
+    app_id: str | None = None
+    select_fields: list[str] | None = None
+
+
+class GetApplicationArgs(BaseModel):
+    application_id: str = Field(description="Application (app registration) object ID.")
+
+
+class UpdateApplicationArgs(ConfirmableArgs):
+    application_id: str
+    update_data: dict[str, Any]
+
+
+class DeleteApplicationArgs(ConfirmableArgs):
+    application_id: str
+
+
 class IdentityAccessDomain(GraphDomain):
     metadata = DomainMetadata(
         name="identity_access",
@@ -505,6 +574,237 @@ class CatalogOperationDomain(GraphDomain):
         ]
 
 
+class RoleManagementDomain(GraphDomain):
+    metadata = DomainMetadata(
+        name="role_management",
+        display_name="Role Management (RBAC)",
+        description=(
+            "Microsoft Entra directory roles and RBAC: list roles and definitions, inspect "
+            "role assignments, and grant or remove directory role assignments."
+        ),
+        required_permissions=(
+            "RoleManagement.Read.Directory",
+            "RoleManagement.ReadWrite.Directory",
+        ),
+        tags=("rbac", "roles", "directory roles", "entra", "privilege", "admin", "assignment"),
+    )
+
+    def __init__(self, handlers: Any) -> None:
+        self._handlers = handlers
+
+    def tools(self) -> list[ToolDefinition]:
+        return [
+            _tool(
+                "list_directory_roles",
+                "List activated Entra directory roles.",
+                PaginationArgs,
+                self._handlers.list_directory_roles,
+                domain=self.metadata.name,
+                tags=("roles", "rbac", "read"),
+            ),
+            _tool(
+                "list_role_definitions",
+                "List Entra role definitions (built-in and custom).",
+                PaginationArgs,
+                self._handlers.list_role_definitions,
+                domain=self.metadata.name,
+                tags=("roles", "definitions", "rbac", "read"),
+            ),
+            _tool(
+                "list_role_assignments",
+                "List directory role assignments, optionally filtered by principal or role.",
+                ListRoleAssignmentsArgs,
+                self._handlers.list_role_assignments,
+                domain=self.metadata.name,
+                tags=("roles", "assignments", "rbac", "read"),
+            ),
+            _tool(
+                "assign_directory_role",
+                "Assign a directory role to a principal.",
+                AssignDirectoryRoleArgs,
+                self._handlers.assign_directory_role,
+                read_only=False,
+                requires_confirmation=True,
+                domain=self.metadata.name,
+                safety="security_mutation",
+                tags=("roles", "assign", "rbac", "mutation"),
+            ),
+            _tool(
+                "remove_role_assignment",
+                "Remove a directory role assignment.",
+                RemoveRoleAssignmentArgs,
+                self._handlers.remove_role_assignment,
+                read_only=False,
+                requires_confirmation=True,
+                domain=self.metadata.name,
+                safety="security_mutation",
+                tags=("roles", "remove", "rbac", "mutation"),
+            ),
+        ]
+
+
+class ConditionalAccessDomain(GraphDomain):
+    metadata = DomainMetadata(
+        name="conditional_access",
+        display_name="Conditional Access",
+        description=(
+            "Microsoft Entra Conditional Access policies: list and inspect policies and change "
+            "a policy's enforcement state (enabled, disabled, report-only)."
+        ),
+        required_permissions=(
+            "Policy.Read.All",
+            "Policy.ReadWrite.ConditionalAccess",
+        ),
+        tags=("conditional access", "ca", "policy", "mfa", "entra", "zero trust", "access"),
+    )
+
+    def __init__(self, handlers: Any) -> None:
+        self._handlers = handlers
+
+    def tools(self) -> list[ToolDefinition]:
+        return [
+            _tool(
+                "list_conditional_access_policies",
+                "List Conditional Access policies.",
+                PaginationArgs,
+                self._handlers.list_conditional_access_policies,
+                domain=self.metadata.name,
+                tags=("conditional access", "policy", "read"),
+            ),
+            _tool(
+                "get_conditional_access_policy",
+                "Get a Conditional Access policy by ID.",
+                GetConditionalAccessPolicyArgs,
+                self._handlers.get_conditional_access_policy,
+                domain=self.metadata.name,
+                tags=("conditional access", "policy", "read"),
+            ),
+            _tool(
+                "set_conditional_access_policy_state",
+                "Change a Conditional Access policy's enforcement state.",
+                SetConditionalAccessPolicyStateArgs,
+                self._handlers.set_conditional_access_policy_state,
+                read_only=False,
+                requires_confirmation=True,
+                domain=self.metadata.name,
+                safety="security_mutation",
+                tags=("conditional access", "policy", "state", "mutation"),
+            ),
+        ]
+
+
+class LicenseManagementDomain(GraphDomain):
+    metadata = DomainMetadata(
+        name="license_management",
+        display_name="License Management",
+        description=(
+            "Microsoft 365 license inventory and assignment: list subscribed SKUs, read a "
+            "user's license details, and assign or remove user licenses."
+        ),
+        required_permissions=(
+            "Organization.Read.All",
+            "Directory.Read.All",
+            "User.ReadWrite.All",
+        ),
+        tags=("licenses", "skus", "subscriptions", "m365", "assignment", "entitlement"),
+    )
+
+    def __init__(self, handlers: Any) -> None:
+        self._handlers = handlers
+
+    def tools(self) -> list[ToolDefinition]:
+        return [
+            _tool(
+                "list_subscribed_skus",
+                "List the tenant's subscribed Microsoft 365 SKUs.",
+                PaginationArgs,
+                self._handlers.list_subscribed_skus,
+                domain=self.metadata.name,
+                tags=("licenses", "skus", "read"),
+            ),
+            _tool(
+                "get_user_license_details",
+                "List the licenses assigned to a user.",
+                GetUserLicenseDetailsArgs,
+                self._handlers.get_user_license_details,
+                domain=self.metadata.name,
+                tags=("licenses", "user", "read"),
+            ),
+            _tool(
+                "assign_user_license",
+                "Add or remove licenses for a user.",
+                AssignUserLicenseArgs,
+                self._handlers.assign_user_license,
+                read_only=False,
+                requires_confirmation=True,
+                domain=self.metadata.name,
+                safety="mutation",
+                tags=("licenses", "assign", "mutation"),
+            ),
+        ]
+
+
+class ApplicationsDomain(GraphDomain):
+    metadata = DomainMetadata(
+        name="applications",
+        display_name="Applications",
+        description=(
+            "Microsoft Entra application registrations: list and inspect applications and "
+            "update or delete an app registration."
+        ),
+        required_permissions=(
+            "Application.Read.All",
+            "Application.ReadWrite.All",
+        ),
+        tags=("applications", "app registrations", "entra", "apps", "client"),
+    )
+
+    def __init__(self, handlers: Any) -> None:
+        self._handlers = handlers
+
+    def tools(self) -> list[ToolDefinition]:
+        return [
+            _tool(
+                "list_applications",
+                "List Entra application registrations.",
+                ListApplicationsArgs,
+                self._handlers.list_applications,
+                domain=self.metadata.name,
+                tags=("applications", "apps", "read"),
+            ),
+            _tool(
+                "get_application",
+                "Get an application registration by object ID.",
+                GetApplicationArgs,
+                self._handlers.get_application,
+                domain=self.metadata.name,
+                tags=("application", "app", "read"),
+            ),
+            _tool(
+                "update_application",
+                "Update properties on an application registration.",
+                UpdateApplicationArgs,
+                self._handlers.update_application,
+                read_only=False,
+                requires_confirmation=True,
+                domain=self.metadata.name,
+                safety="mutation",
+                tags=("application", "update", "mutation"),
+            ),
+            _tool(
+                "delete_application",
+                "Delete an application registration.",
+                DeleteApplicationArgs,
+                self._handlers.delete_application,
+                read_only=False,
+                requires_confirmation=True,
+                domain=self.metadata.name,
+                safety="destructive",
+                tags=("application", "delete", "mutation"),
+            ),
+        ]
+
+
 class GraphToolFactory:
     def __init__(self, client: GraphClient, catalog: GraphOperationCatalog) -> None:
         self._client = client
@@ -517,6 +817,10 @@ class GraphToolFactory:
             SecurityDomain(self),
             AuditActivityDomain(self),
             DirectoryDeviceDomain(self),
+            RoleManagementDomain(self),
+            ConditionalAccessDomain(self),
+            LicenseManagementDomain(self),
+            ApplicationsDomain(self),
             CatalogOperationDomain(self),
         ]:
             registry.register_domain(domain)
@@ -754,6 +1058,132 @@ class GraphToolFactory:
     async def delete_oauth_permission_grant(self, args: DeleteOAuthPermissionGrantArgs) -> Any:
         return await self._client.request("DELETE", f"/oauth2PermissionGrants/{args.grant_id}")
 
+    async def list_directory_roles(self, args: PaginationArgs) -> Any:
+        return await self._client.request_collection(
+            "/directoryRoles",
+            params=_pagination_params(args),
+            all_pages=args.all_pages,
+            max_pages=args.max_pages,
+        )
+
+    async def list_role_definitions(self, args: PaginationArgs) -> Any:
+        return await self._client.request_collection(
+            "/roleManagement/directory/roleDefinitions",
+            params=_pagination_params(args),
+            all_pages=args.all_pages,
+            max_pages=args.max_pages,
+        )
+
+    async def list_role_assignments(self, args: ListRoleAssignmentsArgs) -> Any:
+        filters: list[str] = []
+        if args.principal_id:
+            filters.append(f"principalId eq '{_escape_odata_string(args.principal_id)}'")
+        if args.role_definition_id:
+            filters.append(f"roleDefinitionId eq '{_escape_odata_string(args.role_definition_id)}'")
+        params = _pagination_params(args)
+        if filters:
+            params["$filter"] = " and ".join(filters)
+        return await self._client.request_collection(
+            "/roleManagement/directory/roleAssignments",
+            params=params,
+            all_pages=args.all_pages,
+            max_pages=args.max_pages,
+        )
+
+    async def assign_directory_role(self, args: AssignDirectoryRoleArgs) -> Any:
+        body = {
+            "principalId": args.principal_id,
+            "roleDefinitionId": args.role_definition_id,
+            "directoryScopeId": args.directory_scope_id,
+        }
+        return await self._client.request(
+            "POST", "/roleManagement/directory/roleAssignments", json_data=body
+        )
+
+    async def remove_role_assignment(self, args: RemoveRoleAssignmentArgs) -> Any:
+        return await self._client.request(
+            "DELETE", f"/roleManagement/directory/roleAssignments/{args.assignment_id}"
+        )
+
+    async def list_conditional_access_policies(self, args: PaginationArgs) -> Any:
+        return await self._client.request_collection(
+            "/identity/conditionalAccess/policies",
+            params=_pagination_params(args),
+            all_pages=args.all_pages,
+            max_pages=args.max_pages,
+        )
+
+    async def get_conditional_access_policy(self, args: GetConditionalAccessPolicyArgs) -> Any:
+        return await self._client.request(
+            "GET", f"/identity/conditionalAccess/policies/{args.policy_id}"
+        )
+
+    async def set_conditional_access_policy_state(
+        self, args: SetConditionalAccessPolicyStateArgs
+    ) -> Any:
+        return await self._client.request(
+            "PATCH",
+            f"/identity/conditionalAccess/policies/{args.policy_id}",
+            json_data={"state": args.state},
+        )
+
+    async def list_subscribed_skus(self, args: PaginationArgs) -> Any:
+        return await self._client.request_collection(
+            "/subscribedSkus",
+            params=_pagination_params(args),
+            all_pages=args.all_pages,
+            max_pages=args.max_pages,
+        )
+
+    async def get_user_license_details(self, args: GetUserLicenseDetailsArgs) -> Any:
+        return await self._client.request("GET", f"/users/{args.user_id}/licenseDetails")
+
+    async def assign_user_license(self, args: AssignUserLicenseArgs) -> Any:
+        if not args.add_sku_ids and not args.remove_sku_ids:
+            return ToolResult.failure(
+                "validation_error",
+                "Provide at least one SKU in add_sku_ids or remove_sku_ids.",
+            )
+        add_licenses = [
+            {"skuId": sku, "disabledPlans": args.disabled_plans or []} for sku in args.add_sku_ids
+        ]
+        body = {"addLicenses": add_licenses, "removeLicenses": args.remove_sku_ids}
+        return await self._client.request(
+            "POST", f"/users/{args.user_id}/assignLicense", json_data=body
+        )
+
+    async def list_applications(self, args: ListApplicationsArgs) -> Any:
+        filters: list[str] = []
+        if args.display_name:
+            filters.append(f"displayName eq '{_escape_odata_string(args.display_name)}'")
+        if args.app_id:
+            filters.append(f"appId eq '{_escape_odata_string(args.app_id)}'")
+        params = _pagination_params(args)
+        params.update(_select_params(args.select_fields))
+        if filters:
+            params["$filter"] = " and ".join(filters)
+        return await self._client.request_collection(
+            "/applications",
+            params=params,
+            all_pages=args.all_pages,
+            max_pages=args.max_pages,
+        )
+
+    async def get_application(self, args: GetApplicationArgs) -> Any:
+        return await self._client.request("GET", f"/applications/{args.application_id}")
+
+    async def update_application(self, args: UpdateApplicationArgs) -> Any:
+        if not args.update_data:
+            return ToolResult.failure(
+                "validation_error", "Provide update_data with at least one property to change."
+            )
+        return await self._client.request(
+            "PATCH", f"/applications/{args.application_id}", json_data=args.update_data
+        )
+
+    async def delete_application(self, args: DeleteApplicationArgs) -> Any:
+        return await self._client.request("DELETE", f"/applications/{args.application_id}")
+
     async def graph_operation(self, args: GenericGraphOperationArgs) -> Any:
         operation = self._catalog.get(args.operation_name)
         if operation is None:
@@ -817,6 +1247,10 @@ def _tool(
 
 def _select_params(select_fields: list[str] | None) -> dict[str, Any]:
     return {"$select": ",".join(select_fields)} if select_fields else {}
+
+
+def _pagination_params(args: Any) -> dict[str, Any]:
+    return {"$top": args.top} if getattr(args, "top", None) else {}
 
 
 def _odata_params(args: Any) -> dict[str, Any]:
