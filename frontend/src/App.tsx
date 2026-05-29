@@ -311,6 +311,7 @@ export function App() {
                     role={selectable ? "button" : undefined}
                     tabIndex={selectable ? 0 : undefined}
                     onKeyDown={(event) => {
+                      if (event.currentTarget !== event.target) return;
                       if (selectable && (event.key === "Enter" || event.key === " ")) {
                         event.preventDefault();
                         if (message.response) setSelectedResponse(message.response);
@@ -394,7 +395,14 @@ function MessageContent({ message }: { message: ChatMessage }) {
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         components={{
-          a: ({ node, ...props }) => <a {...props} target="_blank" rel="noreferrer" />,
+          a: ({ node, ...props }) => (
+            <a
+              {...props}
+              target="_blank"
+              rel="noreferrer"
+              onClick={(event) => event.stopPropagation()}
+            />
+          ),
         }}
       >
         {message.content}
