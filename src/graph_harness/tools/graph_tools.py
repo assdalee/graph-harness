@@ -933,16 +933,6 @@ def _odata_params(args: Any) -> dict[str, Any]:
     return params
 
 
-def _filter_top_params(args: Any) -> dict[str, Any]:
-    """Assemble OData $filter and $top params from an args model's attributes."""
-    params: dict[str, Any] = {}
-    if getattr(args, "filter_expression", None):
-        params["$filter"] = args.filter_expression
-    if getattr(args, "top", None):
-        params["$top"] = args.top
-    return params
-
-
 def _log_query_params(args: LogQueryArgs) -> dict[str, Any]:
     """Build a combined OData $filter (UPN, date, error code, free-form) plus $top for log queries."""
     filters: list[str] = []
