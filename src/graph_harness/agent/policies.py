@@ -1,7 +1,10 @@
+"""Normalize heterogeneous inbound chat messages into the agent's canonical role/content shape."""
+
 from typing import Any
 
 
 def normalize_inbound_messages(messages: list[Any]) -> list[dict[str, Any]]:
+    """Coerce assorted message objects to canonical role/content dicts the loop can consume."""
     normalized: list[dict[str, Any]] = []
     for message in messages:
         payload = message.model_dump(exclude_none=True) if hasattr(message, "model_dump") else dict(message)

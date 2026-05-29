@@ -1,3 +1,5 @@
+"""Chat orchestration service wrapping the agent and optional run recording."""
+
 import uuid
 from collections.abc import Callable
 from datetime import datetime, timezone
@@ -10,6 +12,8 @@ from graph_harness.runs.store import NullRunStore, RunRecord, RunStore
 
 
 class ChatService:
+    """Runs a chat request through the agent and persists the run when enabled."""
+
     def __init__(
         self,
         agent: GraphAgent,
@@ -17,6 +21,7 @@ class ChatService:
         run_store: RunStore | None = None,
         settings: Settings | None = None,
     ) -> None:
+        """Wire the agent with an optional run store and settings snapshot."""
         self._agent = agent
         self._run_store = run_store or NullRunStore()
         self._settings = settings
@@ -27,6 +32,7 @@ class ChatService:
         *,
         on_event: Callable[[AgentTraceEvent], None] | None = None,
     ) -> ChatResponse:
+        """Run the request through the agent and record the run if a store is set."""
         normalized = request.normalized_input()
         messages = normalize_inbound_messages(normalized.messages)
         thread_id = normalized.thread_id or normalized.user_id
@@ -70,6 +76,7 @@ class ChatService:
 
 
 def _first_user_message(messages: list[dict]) -> str:
+    """Return the first user message text for run-record indexing."""
     for message in messages:
         if message.get("role") == "user":
             content = message.get("content")
@@ -79,6 +86,7 @@ def _first_user_message(messages: list[dict]) -> str:
 
 
 def _config_snapshot(settings: Settings | None) -> dict:
+    """Capture the config fields worth recording alongside a run."""
     if settings is None:
         return {}
     return {

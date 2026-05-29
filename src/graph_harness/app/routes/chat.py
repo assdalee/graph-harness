@@ -1,3 +1,5 @@
+"""HTTP routes for chat, including SSE streaming of agent trace events."""
+
 import asyncio
 from collections.abc import Callable
 
@@ -18,6 +20,7 @@ from graph_harness.services.chat_service import ChatService
 
 
 def create_chat_router(auth_dependency: Callable) -> APIRouter:
+    """Build the chat router guarded by the given auth dependency."""
     router = APIRouter(prefix="/v1/graph", tags=["graph"], dependencies=[Depends(auth_dependency)])
 
     @router.post("/chat", response_model=ChatResponse)
@@ -25,6 +28,7 @@ def create_chat_router(auth_dependency: Callable) -> APIRouter:
         request: ChatRequest,
         service: ChatService = Depends(get_chat_service),
     ) -> ChatResponse:
+        """Run a chat request and return the full agent response."""
         return await service.chat(request)
 
     @router.post("/chat/stream")
@@ -32,10 +36,13 @@ def create_chat_router(auth_dependency: Callable) -> APIRouter:
         request: ChatRequest,
         service: ChatService = Depends(get_chat_service),
     ) -> StreamingResponse:
+        """Stream agent trace events as they happen, then the final result, over SSE."""
         async def events():
+            """Yield trace events as they arrive and the result when the run finishes."""
             queue: asyncio.Queue[AgentTraceEvent] = asyncio.Queue()
 
             def on_event(event: AgentTraceEvent) -> None:
+                """Enqueue a trace event from the agent for streaming to the client."""
                 queue.put_nowait(event)
 
             task = asyncio.create_task(service.chat(request, on_event=on_event))
@@ -69,4 +76,5 @@ def create_chat_router(auth_dependency: Callable) -> APIRouter:
 
 
 def _sse(model) -> str:
+    """Serialize a model as a Server-Sent Events data frame."""
     return f"data: {model.model_dump_json()}\n\n"

@@ -1,3 +1,5 @@
+"""FastAPI application factory that wires services, middleware, and routes."""
+
 import uuid
 from contextlib import asynccontextmanager
 
@@ -28,11 +30,13 @@ from graph_harness.tools.graph_tools import GraphToolFactory
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
+    """Build and wire the FastAPI app with services, middleware, and routes."""
     configure_logging()
     settings = settings or get_settings()
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
+        """Close the Graph client on shutdown to release its connections."""
         yield
         client = getattr(app.state, "graph_client", None)
         if client is not None and hasattr(client, "aclose"):
@@ -60,6 +64,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.middleware("http")
     async def request_context(request: Request, call_next):
+        """Stamp each request with a request id and reject oversized bodies."""
         request_id = request.headers.get("x-request-id") or uuid.uuid4().hex
         set_request_id(request_id)
 
@@ -122,6 +127,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.exception_handler(AppError)
     async def app_error_handler(_request: Request, exc: AppError) -> JSONResponse:
+        """Render typed AppErrors as structured JSON with their status code."""
         return JSONResponse(
             status_code=exc.status_code,
             content={"detail": exc.message, "code": exc.code, "details": exc.details},
@@ -129,6 +135,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.exception_handler(HTTPException)
     async def http_error_handler(_request: Request, exc: HTTPException) -> JSONResponse:
+        """Render FastAPI HTTPExceptions as a consistent JSON detail payload."""
         return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
 
     return app

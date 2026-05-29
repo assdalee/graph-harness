@@ -1,3 +1,4 @@
+"""Data-first catalog of Microsoft Graph operation definitions for generic tools."""
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -6,6 +7,8 @@ from typing import Any
 
 @dataclass(frozen=True)
 class GraphOperation:
+    """Declarative spec for one callable Graph endpoint, including method and param contract."""
+
     name: str
     method: str
     endpoint: str
@@ -29,18 +32,22 @@ class GraphOperationCatalog:
 
     @classmethod
     def default(cls) -> "GraphOperationCatalog":
+        """Build the catalog populated with the built-in default operations."""
         catalog = cls()
         for operation in _DEFAULT_OPERATIONS:
             catalog.operations[operation.name] = operation
         return catalog
 
     def get(self, name: str) -> GraphOperation | None:
+        """Look up an operation by name, or None if unknown."""
         return self.operations.get(name)
 
     def list(self) -> list[GraphOperation]:
+        """Return all operations sorted by name for stable presentation."""
         return sorted(self.operations.values(), key=lambda item: item.name)
 
     def to_dicts(self) -> list[dict[str, Any]]:
+        """Serialize operations to plain dicts for JSON tool schemas."""
         return [
             {
                 "name": op.name,

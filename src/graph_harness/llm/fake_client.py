@@ -1,3 +1,5 @@
+"""No-credential, deterministic LLM test double for evals."""
+
 from __future__ import annotations
 
 import json
@@ -16,6 +18,7 @@ class FakeLLMClient:
     """
 
     def __init__(self, settings: Settings | None = None) -> None:
+        """Load optional canned scenarios from the configured path."""
         self._scenarios = self._load_scenarios(settings.llm_fake_scenarios_path if settings else None)
 
     async def complete(
@@ -25,6 +28,7 @@ class FakeLLMClient:
         tools: list[dict[str, Any]] | None = None,
         tool_choice: str | dict[str, Any] | None = "auto",
     ) -> LLMResponse:
+        """Map the conversation deterministically to a tool call or a final answer."""
         if tools is None:
             return LLMResponse(content=self._final_from_messages(messages))
 
@@ -43,6 +47,7 @@ class FakeLLMClient:
         return self._tool_call_for_user_text(user_text)
 
     def _tool_call_for_user_text(self, text: str) -> LLMResponse:
+        """Pick a canned tool call from keyword heuristics over the user's text."""
         lowered = text.lower()
         if "bad filter" in lowered or "unsupported filter" in lowered:
             return self._call(
@@ -108,6 +113,7 @@ class FakeLLMClient:
         return self._call("list_users", {"top": 10})
 
     def _recover(self, recovery_message: str) -> LLMResponse:
+        """Return a deterministic retry or explanation based on the failed tool's error code."""
         lowered = recovery_message.lower()
         if "invalid_filter" in lowered:
             return self._call("list_security_alerts", {"severity": "high", "top": 10})
@@ -131,12 +137,14 @@ class FakeLLMClient:
         )
 
     def _final_from_messages(self, messages: list[dict[str, Any]]) -> str:
+        """Compose a final answer from the most recent tool result, if any."""
         latest_tool = self._latest_tool_result(messages)
         if latest_tool is not None:
             return self._final_from_tool(latest_tool)
         return "I could not find a tool result to answer from."
 
     def _final_from_tool(self, result: dict[str, Any]) -> str:
+        """Render a tool result envelope into a human-readable final answer."""
         if not result.get("ok", False):
             error = result.get("error") or {}
             return self._format_error(error)
@@ -157,6 +165,7 @@ class FakeLLMClient:
 
     @staticmethod
     def _format_error(error: dict[str, Any]) -> str:
+        """Phrase a tool error code and message as a user-facing explanation."""
         code = str(error.get("code") or "upstream_error")
         message = str(error.get("message") or "The tool call failed.")
         if code == "permission_denied":
@@ -167,6 +176,7 @@ class FakeLLMClient:
         return f"Microsoft Graph returned {code}: {message}"
 
     def _format_records(self, records: list[Any]) -> str:
+        """Summarize a record list, showing the first few records as bullet lines."""
         if not records:
             return "Returned 0 records."
 
@@ -180,6 +190,7 @@ class FakeLLMClient:
 
     @staticmethod
     def _format_record(record: dict[str, Any]) -> str:
+        """Format a single record as a primary label plus selected detail fields."""
         primary = str(
             record.get("title")
             or record.get("displayName")
@@ -205,6 +216,7 @@ class FakeLLMClient:
 
     @staticmethod
     def _format_identifiers(identifiers: list[dict[str, Any]]) -> str:
+        """Join the first few identifier dicts into a compact key/value string."""
         return "; ".join(
             ", ".join(f"{key}: {value}" for key, value in identifier.items())
             for identifier in identifiers[:5]
@@ -212,6 +224,7 @@ class FakeLLMClient:
 
     @staticmethod
     def _extract_records(data: Any) -> list[Any] | None:
+        """Return the record list from a Graph collection or list payload, else None."""
         if isinstance(data, dict) and isinstance(data.get("value"), list):
             return data["value"]
         if isinstance(data, list):
@@ -219,9 +232,11 @@ class FakeLLMClient:
         return None
 
     def _call(self, name: str, args: dict[str, Any]) -> LLMResponse:
+        """Wrap a single named tool call with a deterministic id in an LLMResponse."""
         return LLMResponse(tool_calls=[LLMToolCall(id=f"fake_{name}", name=name, args=args)])
 
     def _scenario_tool_call(self, text: str) -> LLMResponse | None:
+        """Match the user text against canned scenarios and return their tool call, if any."""
         lowered = text.lower()
         for scenario in self._scenarios:
             match = str(scenario.get("match") or "").lower()
@@ -235,6 +250,7 @@ class FakeLLMClient:
 
     @staticmethod
     def _load_scenarios(path: str | None) -> list[dict[str, Any]]:
+        """Load the optional canned-scenario JSON list, tolerating a missing path or file."""
         if not path:
             return []
         scenario_path = Path(path)
@@ -245,6 +261,7 @@ class FakeLLMClient:
 
     @staticmethod
     def _latest_user_text(messages: list[dict[str, Any]]) -> str:
+        """Return the content of the most recent user message, or empty string."""
         for message in reversed(messages):
             if message.get("role") == "user":
                 return str(message.get("content") or "")
@@ -252,6 +269,7 @@ class FakeLLMClient:
 
     @staticmethod
     def _latest_recovery_message(messages: list[dict[str, Any]]) -> str | None:
+        """Return a recovery-policy user message only if no tool result follows it."""
         for message in reversed(messages):
             if message.get("role") == "tool":
                 return None
@@ -261,6 +279,7 @@ class FakeLLMClient:
 
     @staticmethod
     def _latest_tool_result(messages: list[dict[str, Any]]) -> dict[str, Any] | None:
+        """Parse and return the most recent tool message's JSON payload, or None."""
         for message in reversed(messages):
             if message.get("role") != "tool":
                 continue

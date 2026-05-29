@@ -1,12 +1,18 @@
+"""Service that exposes the available tool operations and their domains."""
+
 from graph_harness.api_models.operations import DomainSummary, OperationSummary, OperationsResponse
 from graph_harness.tools.registry import ToolRegistry
 
 
 class OperationsService:
+    """Reads the tool registry to summarize operations and domains for the API."""
+
     def __init__(self, registry: ToolRegistry) -> None:
+        """Store the tool registry to read operation metadata from."""
         self._registry = registry
 
     def list_operations(self) -> OperationsResponse:
+        """Build the catalog of operations and domains exposed by the harness."""
         operations = [
             OperationSummary(
                 name=tool.name,

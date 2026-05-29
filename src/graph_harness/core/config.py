@@ -1,3 +1,5 @@
+"""Application settings model and environment-variable parsing helpers."""
+
 import os
 from functools import lru_cache
 
@@ -6,6 +8,8 @@ from pydantic import BaseModel, Field, field_validator
 
 
 class Settings(BaseModel):
+    """Validated runtime configuration for the harness, sourced from env vars."""
+
     app_name: str = "GraphHarness"
     app_env: str = "local"
     api_key_name: str = "x-api-key"
@@ -25,8 +29,11 @@ class Settings(BaseModel):
     llm_api_key_provider: str | None = None
     openrouter_api_key: str | None = None
     litellm_api_base: str | None = None
+    litellm_temperature: float | None = None
     litellm_max_tokens: int = 2048
     litellm_timeout_seconds: float = 60
+    # Override the model-profile tool-history quirk (None = auto-detect by family).
+    llm_requires_tools_with_tool_history: bool | None = None
 
     graph_tenant_id: str = ""
     graph_backend: str = "live"
@@ -62,6 +69,7 @@ class Settings(BaseModel):
     @field_validator("graph_scopes", "cors_allow_origins", mode="before")
     @classmethod
     def split_csv(cls, value: str | list[str]) -> list[str]:
+        """Accept a comma-separated string or list for multi-value fields."""
         if isinstance(value, str):
             return [part.strip() for part in value.split(",") if part.strip()]
         return value
@@ -69,57 +77,68 @@ class Settings(BaseModel):
     @field_validator("agent_max_turns")
     @classmethod
     def clamp_max_turns(cls, value: int) -> int:
+        """Keep the agent turn budget within a safe range."""
         return max(1, min(value, 10))
 
     @field_validator("agent_max_tool_calls")
     @classmethod
     def clamp_max_tool_calls(cls, value: int) -> int:
+        """Keep the per-run tool-call budget within a safe range."""
         return max(1, min(value, 20))
 
     @field_validator("agent_llm_retries")
     @classmethod
     def clamp_llm_retries(cls, value: int) -> int:
+        """Keep the LLM retry count within a safe range."""
         return max(0, min(value, 5))
 
     @field_validator("agent_empty_response_retries")
     @classmethod
     def clamp_empty_response_retries(cls, value: int) -> int:
+        """Keep the empty-response retry count within a safe range."""
         return max(0, min(value, 3))
 
     @field_validator("agent_repeated_tool_call_limit")
     @classmethod
     def clamp_repeated_tool_call_limit(cls, value: int) -> int:
+        """Keep the repeated-tool-call limit within a safe range."""
         return max(1, min(value, 5))
 
     @field_validator("agent_recovery_max_attempts")
     @classmethod
     def clamp_recovery_max_attempts(cls, value: int) -> int:
+        """Keep the recovery-attempt count within a safe range."""
         return max(0, min(value, 3))
 
     @field_validator("agent_context_recent_messages")
     @classmethod
     def clamp_context_recent_messages(cls, value: int) -> int:
+        """Keep the recent-message retention window within a safe range."""
         return max(4, min(value, 30))
 
     @field_validator("agent_context_max_tool_chars")
     @classmethod
     def clamp_context_max_tool_chars(cls, value: int) -> int:
+        """Keep the per-tool-output truncation length within a safe range."""
         return max(400, min(value, 12000))
 
     @field_validator("agent_domain_tool_selection_max_tools")
     @classmethod
     def clamp_domain_tool_selection_max_tools(cls, value: int) -> int:
+        """Keep the domain tool-selection cap within a safe range."""
         return max(3, min(value, 50))
 
     @field_validator("agent_max_wall_clock_seconds")
     @classmethod
     def clamp_wall_clock(cls, value: float) -> float:
+        """Clamp the run deadline (0 disables it, else cap at 10 minutes)."""
         # 0 disables the deadline; otherwise cap at 10 minutes.
         return max(0.0, min(value, 600.0))
 
     @field_validator("max_request_bytes")
     @classmethod
     def clamp_request_bytes(cls, value: int) -> int:
+        """Keep the max request-body size within a safe range."""
         return max(1024, min(value, 50_000_000))
 
     @property
@@ -134,6 +153,7 @@ class Settings(BaseModel):
 
     @classmethod
     def from_env(cls) -> "Settings":
+        """Build a Settings instance from environment variables (and .env)."""
         load_dotenv(override=False)
         return cls(
             app_name=_get_str("APP_NAME", cls.model_fields["app_name"].default),
@@ -150,8 +170,12 @@ class Settings(BaseModel):
             or _get_optional_str("LLM_API_KEY_PROVIDER"),
             openrouter_api_key=_get_optional_str("OPENROUTER_API_KEY"),
             litellm_api_base=_get_optional_str("LITELLM_API_BASE"),
+            litellm_temperature=_get_optional_float("LITELLM_TEMPERATURE"),
             litellm_max_tokens=_get_int("LITELLM_MAX_TOKENS", 2048),
             litellm_timeout_seconds=_get_float("LITELLM_TIMEOUT_SECONDS", 60),
+            llm_requires_tools_with_tool_history=_get_optional_bool(
+                "LLM_REQUIRES_TOOLS_WITH_TOOL_HISTORY"
+            ),
             graph_tenant_id=_get_str("GRAPH_TENANT_ID", ""),
             graph_backend=_get_str("GRAPH_BACKEND", cls.model_fields["graph_backend"].default),
             graph_client_id=_get_str("GRAPH_CLIENT_ID", ""),
@@ -192,20 +216,24 @@ class Settings(BaseModel):
 
 @lru_cache
 def get_settings() -> Settings:
+    """Return the process-wide cached Settings instance."""
     return Settings.from_env()
 
 
 def _get_str(name: str, default: str) -> str:
+    """Read a string env var, falling back to the default."""
     value = os.getenv(name)
     return value if value is not None else default
 
 
 def _get_optional_str(name: str) -> str | None:
+    """Read an optional string env var, treating empty as unset."""
     value = os.getenv(name)
     return value or None
 
 
 def _get_int(name: str, default: int) -> int:
+    """Read an integer env var, falling back to the default on parse failure."""
     try:
         return int(os.getenv(name, str(default)))
     except ValueError:
@@ -213,6 +241,7 @@ def _get_int(name: str, default: int) -> int:
 
 
 def _get_float(name: str, default: float) -> float:
+    """Read a float env var, falling back to the default on parse failure."""
     try:
         return float(os.getenv(name, str(default)))
     except ValueError:
@@ -220,7 +249,27 @@ def _get_float(name: str, default: float) -> float:
 
 
 def _get_bool(name: str, default: bool) -> bool:
+    """Read a boolean env var from common truthy spellings."""
     value = os.getenv(name)
     if value is None:
         return default
     return value.strip().lower() in {"1", "true", "yes", "y", "on"}
+
+
+def _get_optional_bool(name: str) -> bool | None:
+    """Read an optional boolean env var, returning None when unset."""
+    value = os.getenv(name)
+    if value is None or not value.strip():
+        return None
+    return value.strip().lower() in {"1", "true", "yes", "y", "on"}
+
+
+def _get_optional_float(name: str) -> float | None:
+    """Read an optional float env var, returning None when unset or invalid."""
+    value = os.getenv(name)
+    if value is None or not value.strip():
+        return None
+    try:
+        return float(value)
+    except ValueError:
+        return None

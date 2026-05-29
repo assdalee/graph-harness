@@ -1,3 +1,5 @@
+"""API-key authentication using constant-time comparison."""
+
 import secrets
 
 from fastapi import HTTPException, Security
@@ -7,9 +9,11 @@ from graph_harness.core.config import Settings
 
 
 def build_api_key_dependency(settings: Settings):
+    """Build a FastAPI dependency that enforces the configured API key."""
     header = APIKeyHeader(name=settings.api_key_name, auto_error=False)
 
     def verify_api_key(api_key: str | None = Security(header)) -> bool:
+        """Validate the API key in constant time, allowing all when unset."""
         if not settings.llm_api_key:
             return True
         if not api_key:

@@ -1,3 +1,5 @@
+"""Pydantic request/response and streaming-event models for the chat HTTP API."""
+
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -9,6 +11,8 @@ MessageRole = Literal["system", "user", "assistant", "tool"]
 
 
 class ChatMessageIn(BaseModel):
+    """A single inbound conversation message in an OpenAI-style chat payload."""
+
     model_config = ConfigDict(extra="allow")
 
     role: MessageRole | str = Field(default="user")
@@ -19,6 +23,8 @@ class ChatMessageIn(BaseModel):
 
 
 class ChatInput(BaseModel):
+    """Normalized chat input: the message list plus thread and user identifiers."""
+
     model_config = ConfigDict(extra="allow")
 
     messages: list[ChatMessageIn] = Field(default_factory=list)
@@ -27,6 +33,8 @@ class ChatInput(BaseModel):
 
 
 class ChatRequest(BaseModel):
+    """Top-level chat request accepting either a nested input or top-level fields."""
+
     model_config = ConfigDict(extra="allow")
 
     input: ChatInput | None = None
@@ -36,6 +44,7 @@ class ChatRequest(BaseModel):
     tags: dict[str, Any] = Field(default_factory=dict)
 
     def normalized_input(self) -> ChatInput:
+        """Coalesce nested or top-level fields into a single ChatInput."""
         if self.input is not None:
             return self.input
         return ChatInput(
@@ -46,6 +55,8 @@ class ChatRequest(BaseModel):
 
 
 class ToolCallRecord(BaseModel):
+    """Record of one tool invocation with its arguments and result or error."""
+
     id: str
     name: str
     args: dict[str, Any] = Field(default_factory=dict)
@@ -55,6 +66,8 @@ class ToolCallRecord(BaseModel):
 
 
 class AgentTraceEvent(BaseModel):
+    """A single observability event emitted during an agent run turn."""
+
     event: str
     turn: int = 0
     message: str = ""
@@ -72,6 +85,8 @@ class LLMCallRecord(BaseModel):
 
 
 class ChatResponse(BaseModel):
+    """Full chat response payload: the answer plus run metadata and trace details."""
+
     thread_id: str | None = None
     run_id: str | None = None
     answer: str = ""
@@ -87,20 +102,28 @@ class ChatResponse(BaseModel):
 
 
 class StreamTraceEvent(BaseModel):
+    """Streamed SSE frame carrying an interim agent trace event."""
+
     event: Literal["trace"]
     data: AgentTraceEvent
 
 
 class StreamResultEvent(BaseModel):
+    """Streamed SSE frame carrying the final chat response."""
+
     event: Literal["result"]
     data: ChatResponse
 
 
 class StreamDoneEvent(BaseModel):
+    """Streamed SSE frame signaling the stream has ended."""
+
     event: Literal["done"]
 
 
 class StreamErrorEvent(BaseModel):
+    """Streamed SSE frame reporting an error that aborted the run."""
+
     event: Literal["error"]
     detail: str
     code: str | None = None
