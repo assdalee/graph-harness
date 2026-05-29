@@ -81,3 +81,12 @@ async def test_top_limits_results(client) -> None:
 async def test_delete_oauth_grant_succeeds(client) -> None:
     result = await client.request("DELETE", "/oauth2PermissionGrants/grant-risky")
     assert result["success"] is True
+
+
+@pytest.mark.asyncio
+async def test_advanced_query_is_accepted(client) -> None:
+    # search_user passes advanced_query=True; the mock must accept it like the live client.
+    result = await client.request("GET", "/users", advanced_query=True)
+    assert {u["id"] for u in result["value"]} >= {"user-ada", "user-sarah"}
+    page = await client.request_collection("/users", advanced_query=True)
+    assert "value" in page

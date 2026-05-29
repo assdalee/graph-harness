@@ -92,8 +92,13 @@ class MockGraphClient:
         json_data: dict[str, Any] | None = None,
         params: dict[str, Any] | None = None,
         api_version: str | None = None,
+        advanced_query: bool = False,
     ) -> Any:
-        """Route a request to the matching fixture handler, mimicking Graph responses."""
+        """Route a request to the matching fixture handler, mimicking Graph responses.
+
+        ``advanced_query`` is accepted to match the live client interface but
+        ignored: the mock returns fixtures and sends no consistency headers.
+        """
         method = method.upper()
         endpoint = endpoint if endpoint.startswith("/") else f"/{endpoint}"
         params = params or {}
@@ -144,9 +149,16 @@ class MockGraphClient:
         api_version: str | None = None,
         all_pages: bool = False,
         max_pages: int = 1,
+        advanced_query: bool = False,
     ) -> Any:
         """Return a single page; the mock never paginates so paging args are ignored."""
-        return await self.request("GET", endpoint, params=params, api_version=api_version)
+        return await self.request(
+            "GET",
+            endpoint,
+            params=params,
+            api_version=api_version,
+            advanced_query=advanced_query,
+        )
 
     def _filter_entities(self, entities: list[dict[str, Any]], params: dict[str, Any]) -> list[dict[str, Any]] | dict[str, Any]:
         """Match entities by quoted filter term, with magic terms to simulate rate limits and errors."""
