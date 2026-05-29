@@ -34,3 +34,6 @@ env/
 .DS_Store
 .idea/
 .vscode/
+
+# Claude Code harness state (agent worktrees, local session files)
+.claude/
