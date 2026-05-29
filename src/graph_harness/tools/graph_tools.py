@@ -338,6 +338,44 @@ class ConfirmCompromisedUsersArgs(ConfirmableArgs):
     user_ids: list[str] = Field(description="Object IDs of users to confirm as compromised.")
 
 
+# --- Lifecycle workflows ----------------------------------------------------
+
+
+class ListWorkflowRunsArgs(PaginationArgs):
+    workflow_id: str = Field(description="Lifecycle workflow ID.")
+
+
+class ActivateWorkflowArgs(ConfirmableArgs):
+    workflow_id: str = Field(description="Lifecycle workflow ID to run on demand.")
+    subject_ids: list[str] = Field(description="Object IDs of users to run the workflow against.")
+
+
+# --- Administrative units ---------------------------------------------------
+
+
+class ListAdministrativeUnitMembersArgs(PaginationArgs):
+    au_id: str = Field(description="Administrative unit object ID.")
+
+
+class AddAdministrativeUnitMemberArgs(ConfirmableArgs):
+    au_id: str = Field(description="Administrative unit object ID.")
+    member_id: str = Field(description="Directory object ID of the member to add.")
+
+
+# --- Cross-tenant / B2B collaboration ---------------------------------------
+
+
+class InviteGuestUserArgs(ConfirmableArgs):
+    email: str = Field(description="Email address of the external user to invite.")
+    redirect_url: str = Field(
+        default="https://myapps.microsoft.com",
+        description="URL the invited user is redirected to after accepting.",
+    )
+    send_message: bool = Field(
+        default=True, description="Whether Graph sends the invitation email."
+    )
+
+
 class IdentityAccessDomain(GraphDomain):
     """Graph domain exposing user, group, app, and OAuth identity tools."""
 
@@ -1173,6 +1211,156 @@ class IdentityProtectionDomain(GraphDomain):
         ]
 
 
+class LifecycleWorkflowsDomain(GraphDomain):
+    metadata = DomainMetadata(
+        name="lifecycle_workflows",
+        display_name="Lifecycle Workflows",
+        description=(
+            "Microsoft Entra identity governance lifecycle workflows: list joiner/mover/leaver "
+            "workflows and their runs, and activate a workflow on demand for chosen subjects."
+        ),
+        required_permissions=(
+            "LifecycleWorkflows.Read.All",
+            "LifecycleWorkflows.ReadWrite.All",
+        ),
+        tags=(
+            "lifecycle",
+            "joiner",
+            "mover",
+            "leaver",
+            "offboarding",
+            "onboarding",
+            "automation",
+        ),
+    )
+
+    def __init__(self, handlers: Any) -> None:
+        self._handlers = handlers
+
+    def tools(self) -> list[ToolDefinition]:
+        return [
+            _tool(
+                "list_lifecycle_workflows",
+                "List identity-governance lifecycle workflows.",
+                PaginationArgs,
+                self._handlers.list_lifecycle_workflows,
+                domain=self.metadata.name,
+                tags=("lifecycle", "workflows", "read"),
+            ),
+            _tool(
+                "list_workflow_runs",
+                "List runs for a lifecycle workflow.",
+                ListWorkflowRunsArgs,
+                self._handlers.list_workflow_runs,
+                domain=self.metadata.name,
+                tags=("lifecycle", "runs", "read"),
+            ),
+            _tool(
+                "activate_workflow",
+                "Activate a lifecycle workflow on demand for the given subjects.",
+                ActivateWorkflowArgs,
+                self._handlers.activate_workflow,
+                read_only=False,
+                requires_confirmation=True,
+                domain=self.metadata.name,
+                safety="mutation",
+                tags=("lifecycle", "activate", "mutation"),
+            ),
+        ]
+
+
+class AdministrativeUnitsDomain(GraphDomain):
+    metadata = DomainMetadata(
+        name="administrative_units",
+        display_name="Administrative Units",
+        description=(
+            "Microsoft Entra administrative units: list administrative units and their members, "
+            "and add a directory object as a member of an administrative unit."
+        ),
+        required_permissions=(
+            "AdministrativeUnit.Read.All",
+            "AdministrativeUnit.ReadWrite.All",
+        ),
+        tags=("administrative units", "scoping", "delegation", "directory", "entra"),
+    )
+
+    def __init__(self, handlers: Any) -> None:
+        self._handlers = handlers
+
+    def tools(self) -> list[ToolDefinition]:
+        return [
+            _tool(
+                "list_administrative_units",
+                "List directory administrative units.",
+                PaginationArgs,
+                self._handlers.list_administrative_units,
+                domain=self.metadata.name,
+                tags=("administrative units", "directory", "read"),
+            ),
+            _tool(
+                "list_administrative_unit_members",
+                "List members of an administrative unit.",
+                ListAdministrativeUnitMembersArgs,
+                self._handlers.list_administrative_unit_members,
+                domain=self.metadata.name,
+                tags=("administrative units", "members", "read"),
+            ),
+            _tool(
+                "add_administrative_unit_member",
+                "Add a directory object as a member of an administrative unit.",
+                AddAdministrativeUnitMemberArgs,
+                self._handlers.add_administrative_unit_member,
+                read_only=False,
+                requires_confirmation=True,
+                domain=self.metadata.name,
+                safety="mutation",
+                tags=("administrative units", "members", "add", "mutation"),
+            ),
+        ]
+
+
+class B2BCollaborationDomain(GraphDomain):
+    metadata = DomainMetadata(
+        name="b2b_collaboration",
+        display_name="Cross-tenant / B2B",
+        description=(
+            "Microsoft Entra cross-tenant and B2B collaboration: list guest users and invite an "
+            "external user into the tenant as a guest."
+        ),
+        required_permissions=(
+            "User.Invite.All",
+            "User.ReadWrite.All",
+        ),
+        tags=("b2b", "guest", "cross-tenant", "collaboration", "invitation", "external", "entra"),
+    )
+
+    def __init__(self, handlers: Any) -> None:
+        self._handlers = handlers
+
+    def tools(self) -> list[ToolDefinition]:
+        return [
+            _tool(
+                "list_guest_users",
+                "List guest (external) users in the directory.",
+                PaginationArgs,
+                self._handlers.list_guest_users,
+                domain=self.metadata.name,
+                tags=("b2b", "guest", "users", "read"),
+            ),
+            _tool(
+                "invite_guest_user",
+                "Invite an external user into the tenant as a guest.",
+                InviteGuestUserArgs,
+                self._handlers.invite_guest_user,
+                read_only=False,
+                requires_confirmation=True,
+                domain=self.metadata.name,
+                safety="mutation",
+                tags=("b2b", "guest", "invite", "mutation"),
+            ),
+        ]
+
+
 class GraphToolFactory:
     """Builds the tool registry and implements every Graph tool handler."""
 
@@ -1197,6 +1385,9 @@ class GraphToolFactory:
             AccessReviewsDomain(self),
             AuthenticationMethodsDomain(self),
             IdentityProtectionDomain(self),
+            LifecycleWorkflowsDomain(self),
+            AdministrativeUnitsDomain(self),
+            B2BCollaborationDomain(self),
             CatalogOperationDomain(self),
         ]:
             registry.register_domain(domain)
@@ -1705,6 +1896,74 @@ class GraphToolFactory:
             "/identityProtection/riskyUsers/confirmCompromised",
             json_data={"userIds": args.user_ids},
         )
+
+    async def list_lifecycle_workflows(self, args: PaginationArgs) -> Any:
+        return await self._client.request_collection(
+            "/identityGovernance/lifecycleWorkflows/workflows",
+            params=_pagination_params(args),
+            all_pages=args.all_pages,
+            max_pages=args.max_pages,
+        )
+
+    async def list_workflow_runs(self, args: ListWorkflowRunsArgs) -> Any:
+        return await self._client.request_collection(
+            f"/identityGovernance/lifecycleWorkflows/workflows/{args.workflow_id}/runs",
+            params=_pagination_params(args),
+            all_pages=args.all_pages,
+            max_pages=args.max_pages,
+        )
+
+    async def activate_workflow(self, args: ActivateWorkflowArgs) -> Any:
+        body = {"subjects": [{"id": uid} for uid in args.subject_ids]}
+        return await self._client.request(
+            "POST",
+            f"/identityGovernance/lifecycleWorkflows/workflows/{args.workflow_id}/activate",
+            json_data=body,
+        )
+
+    async def list_administrative_units(self, args: PaginationArgs) -> Any:
+        return await self._client.request_collection(
+            "/directory/administrativeUnits",
+            params=_pagination_params(args),
+            all_pages=args.all_pages,
+            max_pages=args.max_pages,
+        )
+
+    async def list_administrative_unit_members(
+        self, args: ListAdministrativeUnitMembersArgs
+    ) -> Any:
+        return await self._client.request_collection(
+            f"/directory/administrativeUnits/{args.au_id}/members",
+            params=_pagination_params(args),
+            all_pages=args.all_pages,
+            max_pages=args.max_pages,
+        )
+
+    async def add_administrative_unit_member(self, args: AddAdministrativeUnitMemberArgs) -> Any:
+        body = {
+            "@odata.id": (f"https://graph.microsoft.com/v1.0/directoryObjects/{args.member_id}")
+        }
+        return await self._client.request(
+            "POST",
+            f"/directory/administrativeUnits/{args.au_id}/members/$ref",
+            json_data=body,
+        )
+
+    async def list_guest_users(self, args: PaginationArgs) -> Any:
+        return await self._client.request_collection(
+            "/users",
+            params={"$filter": "userType eq 'Guest'", "$top": args.top},
+            all_pages=args.all_pages,
+            max_pages=args.max_pages,
+        )
+
+    async def invite_guest_user(self, args: InviteGuestUserArgs) -> Any:
+        body = {
+            "invitedUserEmailAddress": args.email,
+            "inviteRedirectUrl": args.redirect_url,
+            "sendInvitationMessage": args.send_message,
+        }
+        return await self._client.request("POST", "/invitations", json_data=body)
 
     async def graph_operation(self, args: GenericGraphOperationArgs) -> Any:
         """Execute a cataloged Graph operation, enforcing confirmation and path-param validation."""

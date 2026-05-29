@@ -34,6 +34,13 @@ class MockGraphClient:
                 "userPrincipalName": "alex.security@example.com",
                 "mail": "alex.security@example.com",
             },
+            {
+                "id": "guest-grace",
+                "displayName": "Grace Hopper (Guest)",
+                "userPrincipalName": "grace_external#EXT#@example.com",
+                "mail": "grace@partner.example",
+                "userType": "Guest",
+            },
         ]
         self.groups = [
             {
@@ -194,6 +201,42 @@ class MockGraphClient:
                 "riskLevel": "high",
             }
         ]
+        self.lifecycle_workflows = [
+            {
+                "id": "wf-onboard",
+                "displayName": "Onboard new hires",
+                "category": "joiner",
+                "isEnabled": True,
+            },
+            {
+                "id": "wf-offboard",
+                "displayName": "Offboard leavers",
+                "category": "leaver",
+                "isEnabled": True,
+            },
+        ]
+        self.workflow_runs = [
+            {
+                "id": "run-1",
+                "workflowExecutionType": "scheduled",
+                "processingStatus": "completed",
+                "startedDateTime": "2026-05-20T08:00:00Z",
+            }
+        ]
+        self.administrative_units = [
+            {
+                "id": "au-emea",
+                "displayName": "EMEA",
+                "description": "EMEA-scoped administrative unit",
+            }
+        ]
+        self.au_members = [
+            {
+                "id": "user-ada",
+                "displayName": "Ada Lovelace",
+                "userPrincipalName": "ada@example.com",
+            }
+        ]
 
     async def request(
         self,
@@ -262,6 +305,25 @@ class MockGraphClient:
             return {"value": self._top(self.risky_users, params)}
         if method == "GET" and endpoint == "/identityProtection/riskDetections":
             return {"value": self._top(self.risk_detections, params)}
+        if (
+            method == "GET"
+            and endpoint == "/identityGovernance/lifecycleWorkflows/workflows"
+        ):
+            return {"value": self._top(self.lifecycle_workflows, params)}
+        if (
+            method == "GET"
+            and endpoint.startswith("/identityGovernance/lifecycleWorkflows/workflows/")
+            and endpoint.endswith("/runs")
+        ):
+            return {"value": self._top(self.workflow_runs, params)}
+        if (
+            method == "GET"
+            and endpoint.startswith("/directory/administrativeUnits/")
+            and endpoint.endswith("/members")
+        ):
+            return {"value": self._top(self.au_members, params)}
+        if method == "GET" and endpoint == "/directory/administrativeUnits":
+            return {"value": self._top(self.administrative_units, params)}
         if (
             method == "GET"
             and endpoint.startswith("/users/")
