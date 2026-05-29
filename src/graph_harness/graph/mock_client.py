@@ -135,6 +135,65 @@ class MockGraphClient:
                 "signInAudience": "AzureADMyOrg",
             }
         ]
+        self.eligible_role_assignments = [
+            {
+                "id": "elig-1",
+                "principalId": "user-ada",
+                "roleDefinitionId": "def-ga",
+                "directoryScopeId": "/",
+                "status": "Provisioned",
+            }
+        ]
+        self.active_role_assignment_schedules = [
+            {
+                "id": "active-1",
+                "principalId": "user-sarah",
+                "roleDefinitionId": "def-reader",
+                "directoryScopeId": "/",
+                "assignmentType": "Assigned",
+            }
+        ]
+        self.access_review_definitions = [
+            {
+                "id": "review-def-1",
+                "displayName": "Quarterly admin access review",
+                "status": "InProgress",
+            }
+        ]
+        self.access_packages = [
+            {
+                "id": "ap-1",
+                "displayName": "Finance App Access",
+                "isHidden": False,
+            }
+        ]
+        self.user_auth_methods = [
+            {
+                "id": "auth-pw-1",
+                "@odata.type": "#microsoft.graph.passwordAuthenticationMethod",
+            },
+            {
+                "id": "auth-authenticator-1",
+                "@odata.type": "#microsoft.graph.microsoftAuthenticatorAuthenticationMethod",
+                "displayName": "Pixel 8",
+            },
+        ]
+        self.risky_users = [
+            {
+                "id": "user-ada",
+                "userPrincipalName": "ada@example.com",
+                "riskLevel": "high",
+                "riskState": "atRisk",
+            }
+        ]
+        self.risk_detections = [
+            {
+                "id": "risk-detect-1",
+                "userPrincipalName": "ada@example.com",
+                "riskEventType": "anonymizedIPAddress",
+                "riskLevel": "high",
+            }
+        ]
 
     async def request(
         self,
@@ -182,6 +241,33 @@ class MockGraphClient:
             return self._get_by_identifier(
                 self.applications, endpoint.removeprefix("/applications/")
             )
+        if (
+            method == "GET"
+            and endpoint == "/roleManagement/directory/roleEligibilityScheduleInstances"
+        ):
+            return {"value": self._top(self.eligible_role_assignments, params)}
+        if (
+            method == "GET"
+            and endpoint == "/roleManagement/directory/roleAssignmentScheduleInstances"
+        ):
+            return {"value": self._top(self.active_role_assignment_schedules, params)}
+        if method == "GET" and endpoint == "/identityGovernance/accessReviews/definitions":
+            return {"value": self._top(self.access_review_definitions, params)}
+        if (
+            method == "GET"
+            and endpoint == "/identityGovernance/entitlementManagement/accessPackages"
+        ):
+            return {"value": self._top(self.access_packages, params)}
+        if method == "GET" and endpoint == "/identityProtection/riskyUsers":
+            return {"value": self._top(self.risky_users, params)}
+        if method == "GET" and endpoint == "/identityProtection/riskDetections":
+            return {"value": self._top(self.risk_detections, params)}
+        if (
+            method == "GET"
+            and endpoint.startswith("/users/")
+            and endpoint.endswith("/authentication/methods")
+        ):
+            return {"value": self._top(self.user_auth_methods, params)}
 
         if method == "GET" and endpoint == "/users":
             result = self._filter_entities(self.users, params)

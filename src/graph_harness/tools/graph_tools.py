@@ -278,6 +278,66 @@ class DeleteApplicationArgs(ConfirmableArgs):
     application_id: str
 
 
+# --- Privileged Identity Management (PIM) ----------------------------------
+
+
+class CreateRoleEligibilityRequestArgs(ConfirmableArgs):
+    principal_id: str = Field(description="Object ID of the user, group, or service principal.")
+    role_definition_id: str = Field(description="Directory role definition ID to make eligible.")
+    justification: str = Field(description="Business justification recorded with the request.")
+    directory_scope_id: str = Field(
+        default="/", description="Assignment scope; '/' is tenant-wide."
+    )
+
+
+class ActivateEligibleRoleArgs(ConfirmableArgs):
+    principal_id: str = Field(description="Object ID of the principal activating the role.")
+    role_definition_id: str = Field(description="Directory role definition ID to activate.")
+    justification: str = Field(description="Business justification recorded with the activation.")
+    directory_scope_id: str = Field(
+        default="/", description="Activation scope; '/' is tenant-wide."
+    )
+
+
+# --- Access reviews & entitlement management --------------------------------
+
+
+class StopAccessReviewInstanceArgs(ConfirmableArgs):
+    definition_id: str = Field(description="Access review schedule definition ID.")
+    instance_id: str = Field(description="Access review instance ID to stop.")
+
+
+# --- Authentication methods -------------------------------------------------
+
+
+class ListUserAuthenticationMethodsArgs(PaginationArgs):
+    user_id: str = Field(description="User object ID or userPrincipalName.")
+
+
+class DeleteUserAuthenticationMethodArgs(ConfirmableArgs):
+    user_id: str = Field(description="User object ID or userPrincipalName.")
+    method_id: str = Field(description="Microsoft Authenticator method ID to delete.")
+
+
+class ResetPasswordArgs(ConfirmableArgs):
+    user_id: str = Field(description="User object ID or userPrincipalName.")
+    method_id: str = Field(description="Password authentication method ID.")
+    new_password: str | None = Field(
+        default=None, description="Optional new password; omit to auto-generate."
+    )
+
+
+# --- Identity protection ----------------------------------------------------
+
+
+class DismissRiskyUsersArgs(ConfirmableArgs):
+    user_ids: list[str] = Field(description="Object IDs of risky users to dismiss.")
+
+
+class ConfirmCompromisedUsersArgs(ConfirmableArgs):
+    user_ids: list[str] = Field(description="Object IDs of users to confirm as compromised.")
+
+
 class IdentityAccessDomain(GraphDomain):
     """Graph domain exposing user, group, app, and OAuth identity tools."""
 
@@ -877,6 +937,242 @@ class ApplicationsDomain(GraphDomain):
         ]
 
 
+class PrivilegedIdentityDomain(GraphDomain):
+    metadata = DomainMetadata(
+        name="privileged_identity",
+        display_name="Privileged Identity Management",
+        description=(
+            "Microsoft Entra Privileged Identity Management (PIM): inspect eligible and active "
+            "role assignment schedules and request eligibility or just-in-time activation of "
+            "directory roles."
+        ),
+        required_permissions=(
+            "RoleManagement.Read.Directory",
+            "RoleManagement.ReadWrite.Directory",
+        ),
+        tags=("pim", "privileged", "roles", "eligibility", "activation", "jit", "entra"),
+    )
+
+    def __init__(self, handlers: Any) -> None:
+        self._handlers = handlers
+
+    def tools(self) -> list[ToolDefinition]:
+        return [
+            _tool(
+                "list_eligible_role_assignments",
+                "List PIM eligible role assignment schedule instances.",
+                PaginationArgs,
+                self._handlers.list_eligible_role_assignments,
+                domain=self.metadata.name,
+                tags=("pim", "eligible", "roles", "read"),
+            ),
+            _tool(
+                "list_active_role_assignment_schedules",
+                "List PIM active role assignment schedule instances.",
+                PaginationArgs,
+                self._handlers.list_active_role_assignment_schedules,
+                domain=self.metadata.name,
+                tags=("pim", "active", "roles", "read"),
+            ),
+            _tool(
+                "create_role_eligibility_request",
+                "Request that a principal become eligible for a directory role via PIM.",
+                CreateRoleEligibilityRequestArgs,
+                self._handlers.create_role_eligibility_request,
+                read_only=False,
+                requires_confirmation=True,
+                domain=self.metadata.name,
+                safety="security_mutation",
+                tags=("pim", "eligibility", "request", "mutation"),
+            ),
+            _tool(
+                "activate_eligible_role",
+                "Activate an eligible directory role for a principal via PIM.",
+                ActivateEligibleRoleArgs,
+                self._handlers.activate_eligible_role,
+                read_only=False,
+                requires_confirmation=True,
+                domain=self.metadata.name,
+                safety="security_mutation",
+                tags=("pim", "activation", "request", "mutation"),
+            ),
+        ]
+
+
+class AccessReviewsDomain(GraphDomain):
+    metadata = DomainMetadata(
+        name="access_reviews",
+        display_name="Access Reviews & Entitlement",
+        description=(
+            "Microsoft Entra identity governance: list access review definitions and "
+            "entitlement-management access packages, and stop a running access review instance."
+        ),
+        required_permissions=(
+            "AccessReview.Read.All",
+            "AccessReview.ReadWrite.All",
+            "EntitlementManagement.Read.All",
+        ),
+        tags=(
+            "access reviews",
+            "entitlement",
+            "governance",
+            "access packages",
+            "certification",
+            "entra",
+        ),
+    )
+
+    def __init__(self, handlers: Any) -> None:
+        self._handlers = handlers
+
+    def tools(self) -> list[ToolDefinition]:
+        return [
+            _tool(
+                "list_access_review_definitions",
+                "List access review schedule definitions.",
+                PaginationArgs,
+                self._handlers.list_access_review_definitions,
+                domain=self.metadata.name,
+                tags=("access reviews", "definitions", "governance", "read"),
+            ),
+            _tool(
+                "list_access_packages",
+                "List entitlement-management access packages.",
+                PaginationArgs,
+                self._handlers.list_access_packages,
+                domain=self.metadata.name,
+                tags=("entitlement", "access packages", "governance", "read"),
+            ),
+            _tool(
+                "stop_access_review_instance",
+                "Stop a running access review instance.",
+                StopAccessReviewInstanceArgs,
+                self._handlers.stop_access_review_instance,
+                read_only=False,
+                requires_confirmation=True,
+                domain=self.metadata.name,
+                safety="mutation",
+                tags=("access reviews", "stop", "governance", "mutation"),
+            ),
+        ]
+
+
+class AuthenticationMethodsDomain(GraphDomain):
+    metadata = DomainMetadata(
+        name="authentication_methods",
+        display_name="Authentication Methods",
+        description=(
+            "Microsoft Entra authentication methods: inspect a user's registered methods and "
+            "perform credential mutations such as removing an authenticator method or resetting "
+            "a password."
+        ),
+        required_permissions=(
+            "UserAuthenticationMethod.Read.All",
+            "UserAuthenticationMethod.ReadWrite.All",
+        ),
+        tags=("authentication", "mfa", "credentials", "password", "sspr", "entra"),
+    )
+
+    def __init__(self, handlers: Any) -> None:
+        self._handlers = handlers
+
+    def tools(self) -> list[ToolDefinition]:
+        return [
+            _tool(
+                "list_user_authentication_methods",
+                "List a user's registered authentication methods.",
+                ListUserAuthenticationMethodsArgs,
+                self._handlers.list_user_authentication_methods,
+                domain=self.metadata.name,
+                tags=("authentication", "methods", "mfa", "read"),
+            ),
+            _tool(
+                "delete_user_authentication_method",
+                "Delete a user's Microsoft Authenticator authentication method.",
+                DeleteUserAuthenticationMethodArgs,
+                self._handlers.delete_user_authentication_method,
+                read_only=False,
+                requires_confirmation=True,
+                domain=self.metadata.name,
+                safety="security_mutation",
+                tags=("authentication", "method", "delete", "mutation"),
+            ),
+            _tool(
+                "reset_password",
+                "Reset a user's password authentication method (SSPR-style).",
+                ResetPasswordArgs,
+                self._handlers.reset_password,
+                read_only=False,
+                requires_confirmation=True,
+                domain=self.metadata.name,
+                safety="security_mutation",
+                tags=("authentication", "password", "reset", "sspr", "mutation"),
+            ),
+        ]
+
+
+class IdentityProtectionDomain(GraphDomain):
+    metadata = DomainMetadata(
+        name="identity_protection",
+        display_name="Identity Protection",
+        description=(
+            "Microsoft Entra Identity Protection: inspect risky users and risk detections and "
+            "remediate risk by dismissing or confirming users as compromised."
+        ),
+        required_permissions=(
+            "IdentityRiskyUser.Read.All",
+            "IdentityRiskEvent.Read.All",
+            "IdentityRiskyUser.ReadWrite.All",
+        ),
+        tags=("identity protection", "risk", "risky users", "detections", "remediation", "entra"),
+    )
+
+    def __init__(self, handlers: Any) -> None:
+        self._handlers = handlers
+
+    def tools(self) -> list[ToolDefinition]:
+        return [
+            _tool(
+                "list_risky_users",
+                "List Identity Protection risky users.",
+                PaginationArgs,
+                self._handlers.list_risky_users,
+                domain=self.metadata.name,
+                tags=("identity protection", "risky users", "risk", "read"),
+            ),
+            _tool(
+                "list_risk_detections",
+                "List Identity Protection risk detections.",
+                PaginationArgs,
+                self._handlers.list_risk_detections,
+                domain=self.metadata.name,
+                tags=("identity protection", "risk detections", "risk", "read"),
+            ),
+            _tool(
+                "dismiss_risky_users",
+                "Dismiss the risk state for one or more risky users.",
+                DismissRiskyUsersArgs,
+                self._handlers.dismiss_risky_users,
+                read_only=False,
+                requires_confirmation=True,
+                domain=self.metadata.name,
+                safety="security_mutation",
+                tags=("identity protection", "risky users", "dismiss", "mutation"),
+            ),
+            _tool(
+                "confirm_compromised_users",
+                "Confirm one or more users as compromised.",
+                ConfirmCompromisedUsersArgs,
+                self._handlers.confirm_compromised_users,
+                read_only=False,
+                requires_confirmation=True,
+                domain=self.metadata.name,
+                safety="security_mutation",
+                tags=("identity protection", "risky users", "compromised", "mutation"),
+            ),
+        ]
+
+
 class GraphToolFactory:
     """Builds the tool registry and implements every Graph tool handler."""
 
@@ -897,6 +1193,10 @@ class GraphToolFactory:
             ConditionalAccessDomain(self),
             LicenseManagementDomain(self),
             ApplicationsDomain(self),
+            PrivilegedIdentityDomain(self),
+            AccessReviewsDomain(self),
+            AuthenticationMethodsDomain(self),
+            IdentityProtectionDomain(self),
             CatalogOperationDomain(self),
         ]:
             registry.register_domain(domain)
@@ -1284,6 +1584,127 @@ class GraphToolFactory:
 
     async def delete_application(self, args: DeleteApplicationArgs) -> Any:
         return await self._client.request("DELETE", f"/applications/{args.application_id}")
+
+    async def list_eligible_role_assignments(self, args: PaginationArgs) -> Any:
+        return await self._client.request_collection(
+            "/roleManagement/directory/roleEligibilityScheduleInstances",
+            params=_pagination_params(args),
+            all_pages=args.all_pages,
+            max_pages=args.max_pages,
+        )
+
+    async def list_active_role_assignment_schedules(self, args: PaginationArgs) -> Any:
+        return await self._client.request_collection(
+            "/roleManagement/directory/roleAssignmentScheduleInstances",
+            params=_pagination_params(args),
+            all_pages=args.all_pages,
+            max_pages=args.max_pages,
+        )
+
+    async def create_role_eligibility_request(self, args: CreateRoleEligibilityRequestArgs) -> Any:
+        body = {
+            "principalId": args.principal_id,
+            "roleDefinitionId": args.role_definition_id,
+            "justification": args.justification,
+            "action": "adminAssign",
+            "directoryScopeId": args.directory_scope_id,
+        }
+        return await self._client.request(
+            "POST", "/roleManagement/directory/roleEligibilityScheduleRequests", json_data=body
+        )
+
+    async def activate_eligible_role(self, args: ActivateEligibleRoleArgs) -> Any:
+        body = {
+            "principalId": args.principal_id,
+            "roleDefinitionId": args.role_definition_id,
+            "justification": args.justification,
+            "action": "selfActivate",
+            "directoryScopeId": args.directory_scope_id,
+        }
+        return await self._client.request(
+            "POST", "/roleManagement/directory/roleAssignmentScheduleRequests", json_data=body
+        )
+
+    async def list_access_review_definitions(self, args: PaginationArgs) -> Any:
+        return await self._client.request_collection(
+            "/identityGovernance/accessReviews/definitions",
+            params=_pagination_params(args),
+            all_pages=args.all_pages,
+            max_pages=args.max_pages,
+        )
+
+    async def list_access_packages(self, args: PaginationArgs) -> Any:
+        return await self._client.request_collection(
+            "/identityGovernance/entitlementManagement/accessPackages",
+            params=_pagination_params(args),
+            all_pages=args.all_pages,
+            max_pages=args.max_pages,
+        )
+
+    async def stop_access_review_instance(self, args: StopAccessReviewInstanceArgs) -> Any:
+        endpoint = (
+            f"/identityGovernance/accessReviews/definitions/{args.definition_id}"
+            f"/instances/{args.instance_id}/stop"
+        )
+        return await self._client.request("POST", endpoint)
+
+    async def list_user_authentication_methods(
+        self, args: ListUserAuthenticationMethodsArgs
+    ) -> Any:
+        return await self._client.request_collection(
+            f"/users/{args.user_id}/authentication/methods",
+            params=_pagination_params(args),
+            all_pages=args.all_pages,
+            max_pages=args.max_pages,
+        )
+
+    async def delete_user_authentication_method(
+        self, args: DeleteUserAuthenticationMethodArgs
+    ) -> Any:
+        return await self._client.request(
+            "DELETE",
+            f"/users/{args.user_id}/authentication/microsoftAuthenticatorMethods/{args.method_id}",
+        )
+
+    async def reset_password(self, args: ResetPasswordArgs) -> Any:
+        body: dict[str, Any] = {}
+        if args.new_password is not None:
+            body["newPassword"] = args.new_password
+        return await self._client.request(
+            "POST",
+            f"/users/{args.user_id}/authentication/methods/{args.method_id}/resetPassword",
+            json_data=body or None,
+        )
+
+    async def list_risky_users(self, args: PaginationArgs) -> Any:
+        return await self._client.request_collection(
+            "/identityProtection/riskyUsers",
+            params=_pagination_params(args),
+            all_pages=args.all_pages,
+            max_pages=args.max_pages,
+        )
+
+    async def list_risk_detections(self, args: PaginationArgs) -> Any:
+        return await self._client.request_collection(
+            "/identityProtection/riskDetections",
+            params=_pagination_params(args),
+            all_pages=args.all_pages,
+            max_pages=args.max_pages,
+        )
+
+    async def dismiss_risky_users(self, args: DismissRiskyUsersArgs) -> Any:
+        return await self._client.request(
+            "POST",
+            "/identityProtection/riskyUsers/dismiss",
+            json_data={"userIds": args.user_ids},
+        )
+
+    async def confirm_compromised_users(self, args: ConfirmCompromisedUsersArgs) -> Any:
+        return await self._client.request(
+            "POST",
+            "/identityProtection/riskyUsers/confirmCompromised",
+            json_data={"userIds": args.user_ids},
+        )
 
     async def graph_operation(self, args: GenericGraphOperationArgs) -> Any:
         """Execute a cataloged Graph operation, enforcing confirmation and path-param validation."""
