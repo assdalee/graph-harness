@@ -397,6 +397,34 @@ class CreateSharingLinkArgs(ConfirmableArgs):
     scope: str = Field(default="organization", description="Sharing link scope.")
 
 
+# --- Device management (Intune) --------------------------------------------
+
+
+class GetManagedDeviceArgs(BaseModel):
+    """Input for fetching a single Intune managed device by ID."""
+
+    device_id: str = Field(description="Intune managed device ID.")
+
+
+class WipeManagedDeviceArgs(ConfirmableArgs):
+    """Confirmable input for wiping an Intune managed device."""
+
+    device_id: str = Field(description="Intune managed device ID.")
+    body: dict[str, Any] = Field(default_factory=dict, description="Optional wipe options.")
+
+
+class RetireManagedDeviceArgs(ConfirmableArgs):
+    """Confirmable input for retiring an Intune managed device."""
+
+    device_id: str = Field(description="Intune managed device ID.")
+
+
+class SyncManagedDeviceArgs(ConfirmableArgs):
+    """Confirmable input for triggering a sync on an Intune managed device."""
+
+    device_id: str = Field(description="Intune managed device ID.")
+
+
 class IdentityAccessDomain(GraphDomain):
     """Graph domain exposing user, group, app, and OAuth identity tools."""
 
@@ -1232,6 +1260,106 @@ class FilesDomain(GraphDomain):
         ]
 
 
+class DeviceManagementDomain(GraphDomain):
+    metadata = DomainMetadata(
+        name="device_management",
+        display_name="Device Management (Intune)",
+        description=(
+            "Microsoft Intune device management: inventory managed devices, read device "
+            "compliance and configuration policies, and perform device actions such as "
+            "wipe, retire, and sync."
+        ),
+        required_permissions=(
+            "DeviceManagementManagedDevices.Read.All",
+            "DeviceManagementManagedDevices.ReadWrite.All",
+            "DeviceManagementConfiguration.Read.All",
+        ),
+        tags=(
+            "intune",
+            "mdm",
+            "endpoint",
+            "managed devices",
+            "compliance",
+            "configuration",
+            "wipe",
+            "retire",
+            "sync",
+        ),
+    )
+
+    def __init__(self, handlers: Any) -> None:
+        self._handlers = handlers
+
+    def tools(self) -> list[ToolDefinition]:
+        return [
+            _tool(
+                "list_managed_devices",
+                "List Intune managed devices.",
+                PaginationArgs,
+                self._handlers.list_managed_devices,
+                domain=self.metadata.name,
+                tags=("intune", "managed devices", "read"),
+            ),
+            _tool(
+                "get_managed_device",
+                "Get an Intune managed device by ID.",
+                GetManagedDeviceArgs,
+                self._handlers.get_managed_device,
+                domain=self.metadata.name,
+                tags=("intune", "managed device", "read"),
+            ),
+            _tool(
+                "list_device_compliance_policies",
+                "List Intune device compliance policies.",
+                PaginationArgs,
+                self._handlers.list_device_compliance_policies,
+                domain=self.metadata.name,
+                tags=("intune", "compliance", "policy", "read"),
+            ),
+            _tool(
+                "list_device_configurations",
+                "List Intune device configuration profiles.",
+                PaginationArgs,
+                self._handlers.list_device_configurations,
+                domain=self.metadata.name,
+                tags=("intune", "configuration", "profile", "read"),
+            ),
+            _tool(
+                "wipe_managed_device",
+                "Wipe an Intune managed device.",
+                WipeManagedDeviceArgs,
+                self._handlers.wipe_managed_device,
+                read_only=False,
+                requires_confirmation=True,
+                domain=self.metadata.name,
+                safety="destructive",
+                tags=("intune", "managed device", "wipe", "mutation"),
+            ),
+            _tool(
+                "retire_managed_device",
+                "Retire an Intune managed device.",
+                RetireManagedDeviceArgs,
+                self._handlers.retire_managed_device,
+                read_only=False,
+                requires_confirmation=True,
+                domain=self.metadata.name,
+                safety="destructive",
+                tags=("intune", "managed device", "retire", "mutation"),
+            ),
+            _tool(
+                "sync_managed_device",
+                "Trigger a sync on an Intune managed device.",
+                SyncManagedDeviceArgs,
+                self._handlers.sync_managed_device,
+                read_only=False,
+                requires_confirmation=True,
+                domain=self.metadata.name,
+                safety="mutation",
+                tags=("intune", "managed device", "sync", "mutation"),
+            ),
+        ]
+
+
 class GraphToolFactory:
     """Builds the tool registry and implements every Graph tool handler."""
 
@@ -1256,6 +1384,7 @@ class GraphToolFactory:
             CalendarDomain(self),
             TeamsDomain(self),
             FilesDomain(self),
+            DeviceManagementDomain(self),
             CatalogOperationDomain(self),
         ]:
             registry.register_domain(domain)
@@ -1745,6 +1874,52 @@ class GraphToolFactory:
             "POST",
             f"/users/{args.user_id}/drive/items/{args.item_id}/createLink",
             json_data={"type": args.link_type, "scope": args.scope},
+        )
+
+    async def list_managed_devices(self, args: PaginationArgs) -> Any:
+        return await self._client.request_collection(
+            "/deviceManagement/managedDevices",
+            params=_pagination_params(args),
+            all_pages=args.all_pages,
+            max_pages=args.max_pages,
+        )
+
+    async def get_managed_device(self, args: GetManagedDeviceArgs) -> Any:
+        return await self._client.request(
+            "GET", f"/deviceManagement/managedDevices/{args.device_id}"
+        )
+
+    async def list_device_compliance_policies(self, args: PaginationArgs) -> Any:
+        return await self._client.request_collection(
+            "/deviceManagement/deviceCompliancePolicies",
+            params=_pagination_params(args),
+            all_pages=args.all_pages,
+            max_pages=args.max_pages,
+        )
+
+    async def list_device_configurations(self, args: PaginationArgs) -> Any:
+        return await self._client.request_collection(
+            "/deviceManagement/deviceConfigurations",
+            params=_pagination_params(args),
+            all_pages=args.all_pages,
+            max_pages=args.max_pages,
+        )
+
+    async def wipe_managed_device(self, args: WipeManagedDeviceArgs) -> Any:
+        return await self._client.request(
+            "POST",
+            f"/deviceManagement/managedDevices/{args.device_id}/wipe",
+            json_data=args.body or {},
+        )
+
+    async def retire_managed_device(self, args: RetireManagedDeviceArgs) -> Any:
+        return await self._client.request(
+            "POST", f"/deviceManagement/managedDevices/{args.device_id}/retire"
+        )
+
+    async def sync_managed_device(self, args: SyncManagedDeviceArgs) -> Any:
+        return await self._client.request(
+            "POST", f"/deviceManagement/managedDevices/{args.device_id}/syncDevice"
         )
 
     async def graph_operation(self, args: GenericGraphOperationArgs) -> Any:

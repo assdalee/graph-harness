@@ -193,6 +193,28 @@ class MockGraphClient:
             {"id": "item-budget", "name": "Budget.xlsx", "size": 20480, "folder": None},
             {"id": "item-notes", "name": "Notes.docx", "size": 10240, "folder": None},
         ]
+        self.managed_devices = [
+            {
+                "id": "md-laptop",
+                "deviceName": "ADA-LAPTOP",
+                "operatingSystem": "Windows",
+                "complianceState": "compliant",
+            },
+            {
+                "id": "md-phone",
+                "deviceName": "SARAH-IPHONE",
+                "operatingSystem": "iOS",
+                "complianceState": "noncompliant",
+            },
+        ]
+        self.compliance_policies = [
+            {"id": "cp-win", "displayName": "Windows compliance baseline"},
+            {"id": "cp-ios", "displayName": "iOS compliance baseline"},
+        ]
+        self.device_configurations = [
+            {"id": "dc-wifi", "displayName": "Corp Wi-Fi profile"},
+            {"id": "dc-vpn", "displayName": "Corp VPN profile"},
+        ]
 
     async def request(
         self,
@@ -234,6 +256,17 @@ class MockGraphClient:
             and endpoint.endswith("/licenseDetails")
         ):
             return {"value": self.license_details}
+        if method == "GET" and endpoint == "/deviceManagement/managedDevices":
+            return {"value": self._top(self.managed_devices, params)}
+        if method == "GET" and endpoint.startswith("/deviceManagement/managedDevices/"):
+            return self._get_by_identifier(
+                self.managed_devices,
+                endpoint.removeprefix("/deviceManagement/managedDevices/"),
+            )
+        if method == "GET" and endpoint == "/deviceManagement/deviceCompliancePolicies":
+            return {"value": self._top(self.compliance_policies, params)}
+        if method == "GET" and endpoint == "/deviceManagement/deviceConfigurations":
+            return {"value": self._top(self.device_configurations, params)}
         if method == "GET" and endpoint == "/applications":
             return {"value": self._top(self.applications, params)}
         if method == "GET" and endpoint.startswith("/applications/"):
