@@ -9,7 +9,7 @@ from graph_harness.api_models.chat import ToolCallRecord
 from graph_harness.core.config import Settings
 from graph_harness.llm.types import LLMToolCall
 from graph_harness.tools.registry import ToolRegistry
-from graph_harness.tools.results import ToolResult
+from graph_harness.tools.results import ToolResult, extract_records
 
 
 class ToolExecutor:
@@ -117,10 +117,9 @@ def extract_data(records: list[ToolCallRecord]) -> list[Any]:
         if record.error:
             continue
         payload = record.result.data if record.result else None
-        if isinstance(payload, dict) and isinstance(payload.get("value"), list):
-            data.extend(payload["value"])
-        elif isinstance(payload, list):
-            data.extend(payload)
+        rows = extract_records(payload)
+        if rows is not None:
+            data.extend(rows)
         elif payload is not None:
             data.append(payload)
     return data
