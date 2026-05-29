@@ -278,6 +278,125 @@ class DeleteApplicationArgs(ConfirmableArgs):
     application_id: str
 
 
+# --- Microsoft 365 productivity --------------------------------------------
+
+
+class ListMessagesArgs(PaginationArgs):
+    """Input for listing a user's mail messages."""
+
+    user_id: str = Field(description="User object ID or userPrincipalName.")
+
+
+class GetMessageArgs(BaseModel):
+    """Input for fetching a single mail message."""
+
+    user_id: str = Field(description="User object ID or userPrincipalName.")
+    message_id: str = Field(description="Mail message ID.")
+
+
+class ListMailFoldersArgs(BaseModel):
+    """Input for listing a user's mail folders."""
+
+    user_id: str = Field(description="User object ID or userPrincipalName.")
+
+
+class SendMailArgs(ConfirmableArgs):
+    """Confirmable input for sending mail as a user."""
+
+    user_id: str = Field(description="User object ID or userPrincipalName of the sender.")
+    subject: str = Field(description="Message subject line.")
+    body: str = Field(description="Plain-text message body.")
+    to_recipients: list[str] = Field(description="Recipient email addresses.")
+
+
+class ListEventsArgs(PaginationArgs):
+    """Input for listing a user's calendar events."""
+
+    user_id: str = Field(description="User object ID or userPrincipalName.")
+
+
+class GetEventArgs(BaseModel):
+    """Input for fetching a single calendar event."""
+
+    user_id: str = Field(description="User object ID or userPrincipalName.")
+    event_id: str = Field(description="Calendar event ID.")
+
+
+class CreateEventArgs(ConfirmableArgs):
+    """Confirmable input for creating a calendar event."""
+
+    user_id: str = Field(description="User object ID or userPrincipalName.")
+    subject: str = Field(description="Event subject line.")
+    start_datetime: str = Field(description="Event start in ISO 8601 (e.g. 2026-06-01T09:00:00).")
+    end_datetime: str = Field(description="Event end in ISO 8601 (e.g. 2026-06-01T10:00:00).")
+    time_zone: str = Field(default="UTC", description="IANA/Windows time zone name.")
+    attendees: list[str] = Field(default_factory=list, description="Attendee email addresses.")
+
+
+class CancelEventArgs(ConfirmableArgs):
+    """Confirmable input for cancelling a calendar event."""
+
+    user_id: str = Field(description="User object ID or userPrincipalName.")
+    event_id: str = Field(description="Calendar event ID to cancel.")
+    comment: str = Field(default="", description="Optional cancellation comment for attendees.")
+
+
+class ListJoinedTeamsArgs(BaseModel):
+    """Input for listing the teams a user has joined."""
+
+    user_id: str = Field(description="User object ID or userPrincipalName.")
+
+
+class ListChannelsArgs(BaseModel):
+    """Input for listing the channels of a team."""
+
+    team_id: str = Field(description="Team (group) ID.")
+
+
+class ListChannelMessagesArgs(BaseModel):
+    """Input for listing the messages in a team channel."""
+
+    team_id: str = Field(description="Team (group) ID.")
+    channel_id: str = Field(description="Channel ID.")
+
+
+class SendChannelMessageArgs(ConfirmableArgs):
+    """Confirmable input for posting a message to a team channel."""
+
+    team_id: str = Field(description="Team (group) ID.")
+    channel_id: str = Field(description="Channel ID.")
+    content: str = Field(description="Message body content.")
+
+
+class ListDriveItemsArgs(PaginationArgs):
+    """Input for listing items in the root of a user's drive."""
+
+    user_id: str = Field(description="User object ID or userPrincipalName.")
+
+
+class GetDriveItemArgs(BaseModel):
+    """Input for fetching a single drive item by ID."""
+
+    user_id: str = Field(description="User object ID or userPrincipalName.")
+    item_id: str = Field(description="Drive item ID.")
+
+
+class SearchDriveArgs(BaseModel):
+    """Input for searching a user's drive."""
+
+    user_id: str = Field(description="User object ID or userPrincipalName.")
+    query: str = Field(description="Search query string.")
+
+
+class CreateSharingLinkArgs(ConfirmableArgs):
+    """Confirmable input for creating a sharing link on a drive item."""
+
+    user_id: str = Field(description="User object ID or userPrincipalName.")
+    item_id: str = Field(description="Drive item ID to share.")
+    link_type: Literal["view", "edit"] = Field(default="view", description="Sharing link type.")
+    scope: str = Field(default="organization", description="Sharing link scope.")
+
+
 class IdentityAccessDomain(GraphDomain):
     """Graph domain exposing user, group, app, and OAuth identity tools."""
 
@@ -877,6 +996,242 @@ class ApplicationsDomain(GraphDomain):
         ]
 
 
+class MailDomain(GraphDomain):
+    metadata = DomainMetadata(
+        name="mail",
+        display_name="Mail (Outlook)",
+        description=(
+            "Microsoft 365 Outlook mail: list and read a user's messages and mail folders, "
+            "and send mail on a user's behalf."
+        ),
+        required_permissions=(
+            "Mail.Read",
+            "Mail.Send",
+        ),
+        tags=("mail", "outlook", "email", "messages", "inbox", "m365"),
+    )
+
+    def __init__(self, handlers: Any) -> None:
+        self._handlers = handlers
+
+    def tools(self) -> list[ToolDefinition]:
+        return [
+            _tool(
+                "list_messages",
+                "List a user's mail messages.",
+                ListMessagesArgs,
+                self._handlers.list_messages,
+                domain=self.metadata.name,
+                tags=("mail", "messages", "read"),
+            ),
+            _tool(
+                "get_message",
+                "Get a single mail message by ID.",
+                GetMessageArgs,
+                self._handlers.get_message,
+                domain=self.metadata.name,
+                tags=("mail", "message", "read"),
+            ),
+            _tool(
+                "list_mail_folders",
+                "List a user's mail folders.",
+                ListMailFoldersArgs,
+                self._handlers.list_mail_folders,
+                domain=self.metadata.name,
+                tags=("mail", "folders", "read"),
+            ),
+            _tool(
+                "send_mail",
+                "Send mail on a user's behalf.",
+                SendMailArgs,
+                self._handlers.send_mail,
+                read_only=False,
+                requires_confirmation=True,
+                domain=self.metadata.name,
+                safety="mutation",
+                tags=("mail", "send", "mutation"),
+            ),
+        ]
+
+
+class CalendarDomain(GraphDomain):
+    metadata = DomainMetadata(
+        name="calendar",
+        display_name="Calendar & Events",
+        description=(
+            "Microsoft 365 calendar: list and read a user's events, create new events, "
+            "and cancel existing events."
+        ),
+        required_permissions=(
+            "Calendars.Read",
+            "Calendars.ReadWrite",
+        ),
+        tags=("calendar", "events", "meetings", "outlook", "schedule", "m365"),
+    )
+
+    def __init__(self, handlers: Any) -> None:
+        self._handlers = handlers
+
+    def tools(self) -> list[ToolDefinition]:
+        return [
+            _tool(
+                "list_events",
+                "List a user's calendar events.",
+                ListEventsArgs,
+                self._handlers.list_events,
+                domain=self.metadata.name,
+                tags=("calendar", "events", "read"),
+            ),
+            _tool(
+                "get_event",
+                "Get a single calendar event by ID.",
+                GetEventArgs,
+                self._handlers.get_event,
+                domain=self.metadata.name,
+                tags=("calendar", "event", "read"),
+            ),
+            _tool(
+                "create_event",
+                "Create a calendar event for a user.",
+                CreateEventArgs,
+                self._handlers.create_event,
+                read_only=False,
+                requires_confirmation=True,
+                domain=self.metadata.name,
+                safety="mutation",
+                tags=("calendar", "event", "create", "mutation"),
+            ),
+            _tool(
+                "cancel_event",
+                "Cancel a calendar event.",
+                CancelEventArgs,
+                self._handlers.cancel_event,
+                read_only=False,
+                requires_confirmation=True,
+                domain=self.metadata.name,
+                safety="mutation",
+                tags=("calendar", "event", "cancel", "mutation"),
+            ),
+        ]
+
+
+class TeamsDomain(GraphDomain):
+    metadata = DomainMetadata(
+        name="teams",
+        display_name="Teams",
+        description=(
+            "Microsoft Teams: list the teams a user has joined, list a team's channels and "
+            "channel messages, and post a message to a channel."
+        ),
+        required_permissions=(
+            "Team.ReadBasic.All",
+            "Channel.ReadBasic.All",
+            "ChannelMessage.Send",
+        ),
+        tags=("teams", "channels", "messages", "collaboration", "m365"),
+    )
+
+    def __init__(self, handlers: Any) -> None:
+        self._handlers = handlers
+
+    def tools(self) -> list[ToolDefinition]:
+        return [
+            _tool(
+                "list_joined_teams",
+                "List the teams a user has joined.",
+                ListJoinedTeamsArgs,
+                self._handlers.list_joined_teams,
+                domain=self.metadata.name,
+                tags=("teams", "read"),
+            ),
+            _tool(
+                "list_channels",
+                "List the channels of a team.",
+                ListChannelsArgs,
+                self._handlers.list_channels,
+                domain=self.metadata.name,
+                tags=("teams", "channels", "read"),
+            ),
+            _tool(
+                "list_channel_messages",
+                "List the messages in a team channel.",
+                ListChannelMessagesArgs,
+                self._handlers.list_channel_messages,
+                domain=self.metadata.name,
+                tags=("teams", "channels", "messages", "read"),
+            ),
+            _tool(
+                "send_channel_message",
+                "Post a message to a team channel.",
+                SendChannelMessageArgs,
+                self._handlers.send_channel_message,
+                read_only=False,
+                requires_confirmation=True,
+                domain=self.metadata.name,
+                safety="mutation",
+                tags=("teams", "channels", "message", "send", "mutation"),
+            ),
+        ]
+
+
+class FilesDomain(GraphDomain):
+    metadata = DomainMetadata(
+        name="files",
+        display_name="Files (OneDrive/SharePoint)",
+        description=(
+            "Microsoft 365 files: list and read items in a user's OneDrive, search the drive, "
+            "and create a sharing link for an item."
+        ),
+        required_permissions=(
+            "Files.Read.All",
+            "Files.ReadWrite.All",
+        ),
+        tags=("files", "onedrive", "sharepoint", "documents", "drive", "m365"),
+    )
+
+    def __init__(self, handlers: Any) -> None:
+        self._handlers = handlers
+
+    def tools(self) -> list[ToolDefinition]:
+        return [
+            _tool(
+                "list_drive_items",
+                "List items in the root of a user's drive.",
+                ListDriveItemsArgs,
+                self._handlers.list_drive_items,
+                domain=self.metadata.name,
+                tags=("files", "drive", "read"),
+            ),
+            _tool(
+                "get_drive_item",
+                "Get a single drive item by ID.",
+                GetDriveItemArgs,
+                self._handlers.get_drive_item,
+                domain=self.metadata.name,
+                tags=("files", "drive", "item", "read"),
+            ),
+            _tool(
+                "search_drive",
+                "Search a user's drive for items.",
+                SearchDriveArgs,
+                self._handlers.search_drive,
+                domain=self.metadata.name,
+                tags=("files", "drive", "search", "read"),
+            ),
+            _tool(
+                "create_sharing_link",
+                "Create a sharing link for a drive item.",
+                CreateSharingLinkArgs,
+                self._handlers.create_sharing_link,
+                read_only=False,
+                requires_confirmation=True,
+                domain=self.metadata.name,
+                safety="mutation",
+                tags=("files", "drive", "share", "link", "mutation"),
+            ),
+        ]
+
+
 class GraphToolFactory:
     """Builds the tool registry and implements every Graph tool handler."""
 
@@ -897,6 +1252,10 @@ class GraphToolFactory:
             ConditionalAccessDomain(self),
             LicenseManagementDomain(self),
             ApplicationsDomain(self),
+            MailDomain(self),
+            CalendarDomain(self),
+            TeamsDomain(self),
+            FilesDomain(self),
             CatalogOperationDomain(self),
         ]:
             registry.register_domain(domain)
@@ -1284,6 +1643,109 @@ class GraphToolFactory:
 
     async def delete_application(self, args: DeleteApplicationArgs) -> Any:
         return await self._client.request("DELETE", f"/applications/{args.application_id}")
+
+    async def list_messages(self, args: ListMessagesArgs) -> Any:
+        return await self._client.request_collection(
+            f"/users/{args.user_id}/messages",
+            params=_pagination_params(args),
+            all_pages=args.all_pages,
+            max_pages=args.max_pages,
+        )
+
+    async def get_message(self, args: GetMessageArgs) -> Any:
+        return await self._client.request(
+            "GET", f"/users/{args.user_id}/messages/{args.message_id}"
+        )
+
+    async def list_mail_folders(self, args: ListMailFoldersArgs) -> Any:
+        return await self._client.request_collection(f"/users/{args.user_id}/mailFolders")
+
+    async def send_mail(self, args: SendMailArgs) -> Any:
+        message = {
+            "subject": args.subject,
+            "body": {"contentType": "Text", "content": args.body},
+            "toRecipients": [
+                {"emailAddress": {"address": address}} for address in args.to_recipients
+            ],
+        }
+        return await self._client.request(
+            "POST", f"/users/{args.user_id}/sendMail", json_data={"message": message}
+        )
+
+    async def list_events(self, args: ListEventsArgs) -> Any:
+        return await self._client.request_collection(
+            f"/users/{args.user_id}/events",
+            params=_pagination_params(args),
+            all_pages=args.all_pages,
+            max_pages=args.max_pages,
+        )
+
+    async def get_event(self, args: GetEventArgs) -> Any:
+        return await self._client.request("GET", f"/users/{args.user_id}/events/{args.event_id}")
+
+    async def create_event(self, args: CreateEventArgs) -> Any:
+        body: dict[str, Any] = {
+            "subject": args.subject,
+            "start": {"dateTime": args.start_datetime, "timeZone": args.time_zone},
+            "end": {"dateTime": args.end_datetime, "timeZone": args.time_zone},
+        }
+        if args.attendees:
+            body["attendees"] = [
+                {"emailAddress": {"address": address}, "type": "required"}
+                for address in args.attendees
+            ]
+        return await self._client.request("POST", f"/users/{args.user_id}/events", json_data=body)
+
+    async def cancel_event(self, args: CancelEventArgs) -> Any:
+        return await self._client.request(
+            "POST",
+            f"/users/{args.user_id}/events/{args.event_id}/cancel",
+            json_data={"comment": args.comment},
+        )
+
+    async def list_joined_teams(self, args: ListJoinedTeamsArgs) -> Any:
+        return await self._client.request_collection(f"/users/{args.user_id}/joinedTeams")
+
+    async def list_channels(self, args: ListChannelsArgs) -> Any:
+        return await self._client.request_collection(f"/teams/{args.team_id}/channels")
+
+    async def list_channel_messages(self, args: ListChannelMessagesArgs) -> Any:
+        return await self._client.request_collection(
+            f"/teams/{args.team_id}/channels/{args.channel_id}/messages"
+        )
+
+    async def send_channel_message(self, args: SendChannelMessageArgs) -> Any:
+        return await self._client.request(
+            "POST",
+            f"/teams/{args.team_id}/channels/{args.channel_id}/messages",
+            json_data={"body": {"content": args.content}},
+        )
+
+    async def list_drive_items(self, args: ListDriveItemsArgs) -> Any:
+        return await self._client.request_collection(
+            f"/users/{args.user_id}/drive/root/children",
+            params=_pagination_params(args),
+            all_pages=args.all_pages,
+            max_pages=args.max_pages,
+        )
+
+    async def get_drive_item(self, args: GetDriveItemArgs) -> Any:
+        return await self._client.request(
+            "GET", f"/users/{args.user_id}/drive/items/{args.item_id}"
+        )
+
+    async def search_drive(self, args: SearchDriveArgs) -> Any:
+        escaped = _escape_odata_string(args.query)
+        return await self._client.request_collection(
+            f"/users/{args.user_id}/drive/root/search(q='{escaped}')"
+        )
+
+    async def create_sharing_link(self, args: CreateSharingLinkArgs) -> Any:
+        return await self._client.request(
+            "POST",
+            f"/users/{args.user_id}/drive/items/{args.item_id}/createLink",
+            json_data={"type": args.link_type, "scope": args.scope},
+        )
 
     async def graph_operation(self, args: GenericGraphOperationArgs) -> Any:
         """Execute a cataloged Graph operation, enforcing confirmation and path-param validation."""

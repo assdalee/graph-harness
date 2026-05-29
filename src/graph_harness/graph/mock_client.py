@@ -135,6 +135,64 @@ class MockGraphClient:
                 "signInAudience": "AzureADMyOrg",
             }
         ]
+        self.messages_fixture = [
+            {
+                "id": "msg-1",
+                "subject": "Q2 planning",
+                "from": {"emailAddress": {"address": "sarah@example.com"}},
+                "receivedDateTime": "2026-05-20T08:00:00Z",
+                "isRead": False,
+            },
+            {
+                "id": "msg-2",
+                "subject": "Lunch?",
+                "from": {"emailAddress": {"address": "alex.kim@example.com"}},
+                "receivedDateTime": "2026-05-21T12:00:00Z",
+                "isRead": True,
+            },
+        ]
+        self.mail_folders = [
+            {"id": "folder-inbox", "displayName": "Inbox", "totalItemCount": 2},
+            {"id": "folder-sent", "displayName": "Sent Items", "totalItemCount": 5},
+        ]
+        self.events = [
+            {
+                "id": "event-1",
+                "subject": "Sprint review",
+                "start": {"dateTime": "2026-06-01T09:00:00", "timeZone": "UTC"},
+                "end": {"dateTime": "2026-06-01T10:00:00", "timeZone": "UTC"},
+            },
+            {
+                "id": "event-2",
+                "subject": "1:1 with Sarah",
+                "start": {"dateTime": "2026-06-02T14:00:00", "timeZone": "UTC"},
+                "end": {"dateTime": "2026-06-02T14:30:00", "timeZone": "UTC"},
+            },
+        ]
+        self.joined_teams = [
+            {"id": "team-eng", "displayName": "Engineering", "description": "Engineering team"},
+            {"id": "team-ops", "displayName": "Operations", "description": "Ops team"},
+        ]
+        self.channels = [
+            {"id": "channel-general", "displayName": "General", "membershipType": "standard"},
+            {"id": "channel-incidents", "displayName": "Incidents", "membershipType": "private"},
+        ]
+        self.channel_messages = [
+            {
+                "id": "cmsg-1",
+                "body": {"content": "Deploy is green."},
+                "from": {"user": {"displayName": "Ada Lovelace"}},
+            },
+            {
+                "id": "cmsg-2",
+                "body": {"content": "Thanks all!"},
+                "from": {"user": {"displayName": "Sarah Chen"}},
+            },
+        ]
+        self.drive_items = [
+            {"id": "item-budget", "name": "Budget.xlsx", "size": 20480, "folder": None},
+            {"id": "item-notes", "name": "Notes.docx", "size": 10240, "folder": None},
+        ]
 
     async def request(
         self,
@@ -182,6 +240,41 @@ class MockGraphClient:
             return self._get_by_identifier(
                 self.applications, endpoint.removeprefix("/applications/")
             )
+
+        # Microsoft 365 productivity user-scoped reads must be routed before the
+        # generic "/users/{id}" get-by-id branch, which would otherwise shadow them.
+        if method == "GET" and endpoint.startswith("/users/"):
+            tail = endpoint.removeprefix("/users/")
+            if "/" in tail:
+                _user, rest = tail.split("/", 1)
+                if rest == "messages":
+                    return {"value": self._top(self.messages_fixture, params)}
+                if rest.startswith("messages/"):
+                    return self._get_by_identifier(
+                        self.messages_fixture, rest.removeprefix("messages/")
+                    )
+                if rest == "mailFolders":
+                    return {"value": self._top(self.mail_folders, params)}
+                if rest == "events":
+                    return {"value": self._top(self.events, params)}
+                if rest.startswith("events/"):
+                    return self._get_by_identifier(self.events, rest.removeprefix("events/"))
+                if rest == "joinedTeams":
+                    return {"value": self._top(self.joined_teams, params)}
+                if rest == "drive/root/children":
+                    return {"value": self._top(self.drive_items, params)}
+                if rest.startswith("drive/root/search"):
+                    return {"value": self._top(self.drive_items, params)}
+                if rest.startswith("drive/items/"):
+                    return self._get_by_identifier(
+                        self.drive_items, rest.removeprefix("drive/items/")
+                    )
+        if method == "GET" and endpoint.startswith("/teams/"):
+            tail = endpoint.removeprefix("/teams/")
+            if tail.endswith("/channels"):
+                return {"value": self._top(self.channels, params)}
+            if "/channels/" in tail and tail.endswith("/messages"):
+                return {"value": self._top(self.channel_messages, params)}
 
         if method == "GET" and endpoint == "/users":
             result = self._filter_entities(self.users, params)
