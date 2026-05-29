@@ -21,6 +21,8 @@ import {
   XCircle,
 } from "lucide-react";
 import { FormEvent, useEffect, useMemo, useState } from "react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import {
   AgentTraceEvent,
   ChatMessage,
@@ -299,21 +301,32 @@ export function App() {
             </div>
           ) : (
             <div className="messages">
-              {messages.map((message, index) => (
-                <button
-                  key={`${message.role}-${index}`}
-                  className={`message message-${message.role}`}
-                  onClick={() => message.response && setSelectedResponse(message.response)}
-                >
-                  <span className="message-avatar" aria-hidden="true">
-                    {message.role === "user" ? "You" : <ShieldCheck size={16} />}
-                  </span>
-                  <span className="message-body">
-                    <span className="message-role">{message.role}</span>
-                    <p className="message-content">{message.content}</p>
-                  </span>
-                </button>
-              ))}
+              {messages.map((message, index) => {
+                const selectable = Boolean(message.response);
+                return (
+                  <div
+                    key={`${message.role}-${index}`}
+                    className={`message message-${message.role}${selectable ? " message-selectable" : ""}`}
+                    onClick={() => message.response && setSelectedResponse(message.response)}
+                    role={selectable ? "button" : undefined}
+                    tabIndex={selectable ? 0 : undefined}
+                    onKeyDown={(event) => {
+                      if (selectable && (event.key === "Enter" || event.key === " ")) {
+                        event.preventDefault();
+                        if (message.response) setSelectedResponse(message.response);
+                      }
+                    }}
+                  >
+                    <span className="message-avatar" aria-hidden="true">
+                      {message.role === "user" ? "You" : <ShieldCheck size={16} />}
+                    </span>
+                    <div className="message-body">
+                      <span className="message-role">{message.role}</span>
+                      <MessageContent message={message} />
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           )}
         </section>
@@ -368,6 +381,24 @@ export function App() {
           onSelect={(runId) => void selectRun(runId)}
         />
       ) : null}
+    </div>
+  );
+}
+
+function MessageContent({ message }: { message: ChatMessage }) {
+  if (message.role !== "assistant") {
+    return <p className="message-content">{message.content}</p>;
+  }
+  return (
+    <div className="message-content markdown">
+      <ReactMarkdown
+        remarkPlugins={[remarkGfm]}
+        components={{
+          a: ({ node, ...props }) => <a {...props} target="_blank" rel="noreferrer" />,
+        }}
+      >
+        {message.content}
+      </ReactMarkdown>
     </div>
   );
 }
