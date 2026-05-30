@@ -510,6 +510,8 @@ class MockGraphClient:
             return self._get_by_identifier(self.booking_businesses, tail)
         if method == "POST" and endpoint == "/search/query":
             return {"value": [{"hitsContainers": [{"hits": self.search_hits, "total": 1}]}]}
+        if method == "POST" and endpoint.endswith("/extractSensitivityLabels"):
+            return {"labels": [{"sensitivityLabelId": "label-conf"}]}
 
         if method == "GET" and endpoint == "/users":
             result = self._filter_entities(self.users, params)

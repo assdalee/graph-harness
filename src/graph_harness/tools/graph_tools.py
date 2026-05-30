@@ -583,6 +583,38 @@ class EmptyArgs(BaseModel):
     """Input for a tool that takes no parameters."""
 
 
+SecureScoreControlState = Literal["Default", "Ignored", "ThirdParty", "Reviewed"]
+
+
+class UpdateSecureScoreControlStateArgs(ConfirmableArgs):
+    """Confirmable input for updating the review state of a Secure Score control."""
+
+    control_id: str = Field(description="Secure Score control profile ID.")
+    state: SecureScoreControlState = Field(description="New control state to record.")
+    comment: str | None = Field(default=None, description="Optional reviewer comment.")
+
+
+class CreateEdiscoveryCaseArgs(ConfirmableArgs):
+    """Confirmable input for creating an eDiscovery case."""
+
+    display_name: str = Field(description="Display name for the new eDiscovery case.")
+    description: str | None = Field(default=None, description="Optional case description.")
+
+
+class AddEdiscoveryCustodianArgs(ConfirmableArgs):
+    """Confirmable input for adding a custodian to an eDiscovery case."""
+
+    case_id: str = Field(description="eDiscovery case ID.")
+    email: str = Field(description="Custodian email address (userPrincipalName).")
+
+
+class ExtractSensitivityLabelsArgs(BaseModel):
+    """Input for extracting the sensitivity labels applied to a drive item."""
+
+    drive_id: str = Field(description="Drive ID containing the item.")
+    item_id: str = Field(description="Drive item ID to inspect.")
+
+
 class GetEdiscoveryCaseArgs(BaseModel):
     """Input for fetching a single eDiscovery case."""
 
@@ -2033,9 +2065,12 @@ class SecureScoreDomain(GraphDomain):
         display_name="Secure Score",
         description=(
             "Microsoft Secure Score: list secure score snapshots and the control profiles that "
-            "describe each improvement action. Read-only."
+            "describe each improvement action, and update a control's review state."
         ),
-        required_permissions=("SecurityEvents.Read.All",),
+        required_permissions=(
+            "SecurityEvents.Read.All",
+            "SecurityEvents.ReadWrite.All",
+        ),
         tags=("secure score", "security", "posture", "controls", "compliance"),
     )
 
@@ -2059,6 +2094,17 @@ class SecureScoreDomain(GraphDomain):
                 self._handlers.list_secure_score_control_profiles,
                 domain=self.metadata.name,
                 tags=("secure score", "controls", "read"),
+            ),
+            _tool(
+                "update_secure_score_control_state",
+                "Update the review state of a Secure Score control profile.",
+                UpdateSecureScoreControlStateArgs,
+                self._handlers.update_secure_score_control_state,
+                read_only=False,
+                requires_confirmation=True,
+                domain=self.metadata.name,
+                safety="mutation",
+                tags=("secure score", "control", "update", "mutation"),
             ),
         ]
 
@@ -2106,6 +2152,28 @@ class EdiscoveryDomain(GraphDomain):
                 self._handlers.list_ediscovery_custodians,
                 domain=self.metadata.name,
                 tags=("ediscovery", "custodians", "read"),
+            ),
+            _tool(
+                "create_ediscovery_case",
+                "Create a new eDiscovery case.",
+                CreateEdiscoveryCaseArgs,
+                self._handlers.create_ediscovery_case,
+                read_only=False,
+                requires_confirmation=True,
+                domain=self.metadata.name,
+                safety="mutation",
+                tags=("ediscovery", "case", "create", "mutation"),
+            ),
+            _tool(
+                "add_ediscovery_custodian",
+                "Add a custodian to an eDiscovery case.",
+                AddEdiscoveryCustodianArgs,
+                self._handlers.add_ediscovery_custodian,
+                read_only=False,
+                requires_confirmation=True,
+                domain=self.metadata.name,
+                safety="mutation",
+                tags=("ediscovery", "custodian", "add", "mutation"),
             ),
             _tool(
                 "close_ediscovery_case",
@@ -2161,6 +2229,14 @@ class InformationProtectionDomain(GraphDomain):
                 self._handlers.list_label_policy_settings,
                 domain=self.metadata.name,
                 tags=("information protection", "policy", "read"),
+            ),
+            _tool(
+                "extract_sensitivity_labels",
+                "Extract the sensitivity labels applied to a drive item.",
+                ExtractSensitivityLabelsArgs,
+                self._handlers.extract_sensitivity_labels,
+                domain=self.metadata.name,
+                tags=("information protection", "labels", "driveitem", "read"),
             ),
         ]
 
@@ -3117,6 +3193,18 @@ class GraphToolFactory:
             max_pages=args.max_pages,
         )
 
+    async def update_secure_score_control_state(
+        self, args: UpdateSecureScoreControlStateArgs
+    ) -> Any:
+        update: dict[str, Any] = {"state": args.state}
+        if args.comment:
+            update["comment"] = args.comment
+        return await self._client.request(
+            "PATCH",
+            f"/security/secureScoreControlProfiles/{args.control_id}",
+            json_data={"controlStateUpdates": [update]},
+        )
+
     async def list_ediscovery_cases(self, args: PaginationArgs) -> Any:
         return await self._client.request_collection(
             "/security/cases/ediscoveryCases",
@@ -3133,6 +3221,21 @@ class GraphToolFactory:
     async def list_ediscovery_custodians(self, args: ListEdiscoveryCustodiansArgs) -> Any:
         return await self._client.request_collection(
             f"/security/cases/ediscoveryCases/{args.case_id}/custodians"
+        )
+
+    async def create_ediscovery_case(self, args: CreateEdiscoveryCaseArgs) -> Any:
+        body: dict[str, Any] = {"displayName": args.display_name}
+        if args.description:
+            body["description"] = args.description
+        return await self._client.request(
+            "POST", "/security/cases/ediscoveryCases", json_data=body
+        )
+
+    async def add_ediscovery_custodian(self, args: AddEdiscoveryCustodianArgs) -> Any:
+        return await self._client.request(
+            "POST",
+            f"/security/cases/ediscoveryCases/{args.case_id}/custodians",
+            json_data={"email": args.email},
         )
 
     async def close_ediscovery_case(self, args: CloseEdiscoveryCaseArgs) -> Any:
@@ -3156,6 +3259,12 @@ class GraphToolFactory:
     async def list_label_policy_settings(self, args: EmptyArgs) -> Any:
         return await self._client.request_collection(
             "/security/informationProtection/labelPolicySettings"
+        )
+
+    async def extract_sensitivity_labels(self, args: ExtractSensitivityLabelsArgs) -> Any:
+        return await self._client.request(
+            "POST",
+            f"/drives/{args.drive_id}/items/{args.item_id}/extractSensitivityLabels",
         )
 
     async def list_threat_intelligence_articles(self, args: PaginationArgs) -> Any:

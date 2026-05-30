@@ -38,6 +38,9 @@ def test_write_tools_are_gated() -> None:
     registry = build_registry()
     for name, domain in (
         ("close_ediscovery_case", "ediscovery"),
+        ("create_ediscovery_case", "ediscovery"),
+        ("add_ediscovery_custodian", "ediscovery"),
+        ("update_secure_score_control_state", "secure_score"),
         ("create_online_meeting", "online_meetings"),
         ("create_booking_appointment", "bookings"),
     ):
@@ -51,7 +54,7 @@ def test_write_tools_are_gated() -> None:
 
 def test_read_only_domains_have_no_write_tools() -> None:
     registry = build_registry()
-    for domain in ("secure_score", "information_protection", "threat_intelligence", "search"):
+    for domain in ("information_protection", "threat_intelligence", "search"):
         tools = registry.tools_for_domain(domain)
         assert tools, domain
         assert all(tool.read_only for tool in tools), domain
@@ -143,6 +146,53 @@ async def test_create_online_meeting_requires_confirmation() -> None:
     )
     assert record.error is not None
     assert record.error.code == "confirmation_required"
+
+
+@pytest.mark.asyncio
+async def test_update_secure_score_control_state_requires_confirmation() -> None:
+    record = await build_executor().execute_call(
+        LLMToolCall(
+            id="1",
+            name="update_secure_score_control_state",
+            args={"control_id": "MFARegistrationV2", "state": "Reviewed"},
+        )
+    )
+    assert record.error is not None
+    assert record.error.code == "confirmation_required"
+
+
+@pytest.mark.asyncio
+async def test_update_secure_score_control_state_executes_when_confirmed() -> None:
+    record = await build_executor().execute_call(
+        LLMToolCall(
+            id="1",
+            name="update_secure_score_control_state",
+            args={
+                "control_id": "MFARegistrationV2",
+                "state": "Reviewed",
+                "confirmed": True,
+                "reason": "Marking the control reviewed as the user requested.",
+            },
+        )
+    )
+    assert record.error is None
+    assert record.result is not None and record.result.ok is True
+
+
+@pytest.mark.asyncio
+async def test_extract_sensitivity_labels_is_read_and_runs() -> None:
+    registry = build_registry()
+    tool = registry.get("extract_sensitivity_labels")
+    assert tool is not None and tool.read_only is True
+    record = await build_executor().execute_call(
+        LLMToolCall(
+            id="1",
+            name="extract_sensitivity_labels",
+            args={"drive_id": "drive-1", "item_id": "item-budget"},
+        )
+    )
+    assert record.error is None
+    assert record.result is not None and record.result.ok is True
 
 
 @pytest.mark.asyncio
