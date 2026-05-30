@@ -713,6 +713,108 @@ class SearchQueryArgs(BaseModel):
     size: int = Field(default=25, ge=1, le=500, description="Maximum hits to return.")
 
 
+# --- Tier-3 long-tail / specialized ----------------------------------------
+
+
+class GetPrinterArgs(BaseModel):
+    """Input for fetching a Universal Print printer."""
+
+    printer_id: str = Field(description="Universal Print printer ID.")
+
+
+class ListPrintJobsArgs(BaseModel):
+    """Input for listing the jobs queued on a Universal Print printer."""
+
+    printer_id: str = Field(description="Universal Print printer ID.")
+
+
+class CancelPrintJobArgs(ConfirmableArgs):
+    """Confirmable input for cancelling a print job."""
+
+    printer_id: str = Field(description="Universal Print printer ID.")
+    job_id: str = Field(description="Print job ID to cancel.")
+
+
+class ListClassMembersArgs(BaseModel):
+    """Input for listing the members of an EDU class."""
+
+    class_id: str = Field(description="Education class ID.")
+
+
+class ListClassAssignmentsArgs(BaseModel):
+    """Input for listing the assignments of an EDU class."""
+
+    class_id: str = Field(description="Education class ID.")
+
+
+class GetEducationUserArgs(BaseModel):
+    """Input for fetching an EDU user."""
+
+    user_id: str = Field(description="Education user ID or userPrincipalName.")
+
+
+class GetCloudPcArgs(BaseModel):
+    """Input for fetching a Windows 365 Cloud PC."""
+
+    cloud_pc_id: str = Field(description="Cloud PC ID.")
+
+
+class RebootCloudPcArgs(ConfirmableArgs):
+    """Confirmable input for rebooting a Cloud PC."""
+
+    cloud_pc_id: str = Field(description="Cloud PC ID to reboot.")
+
+
+class ReprovisionCloudPcArgs(ConfirmableArgs):
+    """Confirmable input for reprovisioning a Cloud PC (destructive)."""
+
+    cloud_pc_id: str = Field(description="Cloud PC ID to reprovision.")
+
+
+class GetEngageCommunityArgs(BaseModel):
+    """Input for fetching a Viva Engage community."""
+
+    community_id: str = Field(description="Viva Engage community ID.")
+
+
+class GetSubscriptionArgs(BaseModel):
+    """Input for fetching a change-notification subscription."""
+
+    subscription_id: str = Field(description="Subscription ID.")
+
+
+class CreateSubscriptionArgs(ConfirmableArgs):
+    """Confirmable input for creating a change-notification subscription (webhook)."""
+
+    change_type: str = Field(
+        description="Comma-separated change types (e.g. 'created,updated,deleted')."
+    )
+    notification_url: str = Field(description="HTTPS notification endpoint that Graph will call.")
+    resource: str = Field(
+        description="Resource path to watch (e.g. 'me/mailFolders/Inbox/messages')."
+    )
+    expiration_date_time: str = Field(
+        description="Subscription expiration time (ISO 8601, within Graph's per-resource cap)."
+    )
+    client_state: str | None = Field(
+        default=None,
+        description="Opaque value echoed in every notification for the receiver to validate.",
+    )
+
+
+class RenewSubscriptionArgs(ConfirmableArgs):
+    """Confirmable input for extending a subscription's expiration."""
+
+    subscription_id: str = Field(description="Subscription ID to renew.")
+    expiration_date_time: str = Field(description="New expiration time (ISO 8601).")
+
+
+class DeleteSubscriptionArgs(ConfirmableArgs):
+    """Confirmable input for deleting a change-notification subscription."""
+
+    subscription_id: str = Field(description="Subscription ID to delete.")
+
+
 class IdentityAccessDomain(GraphDomain):
     """Graph domain exposing user, group, app, and OAuth identity tools."""
 
@@ -2442,6 +2544,381 @@ class SearchDomain(GraphDomain):
         ]
 
 
+class UniversalPrintDomain(GraphDomain):
+    metadata = DomainMetadata(
+        name="universal_print",
+        display_name="Universal Print",
+        description=(
+            "Microsoft Universal Print: list printers and printer shares, inspect a printer's "
+            "queued jobs, and cancel a print job."
+        ),
+        required_permissions=(
+            "Printer.Read.All",
+            "PrintJob.ReadWriteBasic.All",
+        ),
+        tags=("universal print", "printers", "print jobs", "m365"),
+    )
+
+    def __init__(self, handlers: Any) -> None:
+        self._handlers = handlers
+
+    def tools(self) -> list[ToolDefinition]:
+        return [
+            _tool(
+                "list_printers",
+                "List Universal Print printers.",
+                PaginationArgs,
+                self._handlers.list_printers,
+                domain=self.metadata.name,
+                tags=("universal print", "printers", "read"),
+            ),
+            _tool(
+                "get_printer",
+                "Get a Universal Print printer by ID.",
+                GetPrinterArgs,
+                self._handlers.get_printer,
+                domain=self.metadata.name,
+                tags=("universal print", "printer", "read"),
+            ),
+            _tool(
+                "list_printer_shares",
+                "List Universal Print printer shares.",
+                PaginationArgs,
+                self._handlers.list_printer_shares,
+                domain=self.metadata.name,
+                tags=("universal print", "shares", "read"),
+            ),
+            _tool(
+                "list_print_jobs",
+                "List the jobs queued on a Universal Print printer.",
+                ListPrintJobsArgs,
+                self._handlers.list_print_jobs,
+                domain=self.metadata.name,
+                tags=("universal print", "jobs", "read"),
+            ),
+            _tool(
+                "cancel_print_job",
+                "Cancel a queued print job.",
+                CancelPrintJobArgs,
+                self._handlers.cancel_print_job,
+                read_only=False,
+                requires_confirmation=True,
+                domain=self.metadata.name,
+                safety="mutation",
+                tags=("universal print", "job", "cancel", "mutation"),
+            ),
+        ]
+
+
+class EducationDomain(GraphDomain):
+    metadata = DomainMetadata(
+        name="education",
+        display_name="Education",
+        description=(
+            "Microsoft Education (EDU tenants): list schools and classes, inspect a class's "
+            "members and assignments, and read EDU users. Read-only."
+        ),
+        required_permissions=(
+            "EduRoster.Read.All",
+            "EduAssignments.Read.All",
+        ),
+        tags=("education", "edu", "schools", "classes", "assignments"),
+    )
+
+    def __init__(self, handlers: Any) -> None:
+        self._handlers = handlers
+
+    def tools(self) -> list[ToolDefinition]:
+        return [
+            _tool(
+                "list_education_schools",
+                "List Education schools in the tenant.",
+                PaginationArgs,
+                self._handlers.list_education_schools,
+                domain=self.metadata.name,
+                tags=("education", "schools", "read"),
+            ),
+            _tool(
+                "list_education_classes",
+                "List Education classes in the tenant.",
+                PaginationArgs,
+                self._handlers.list_education_classes,
+                domain=self.metadata.name,
+                tags=("education", "classes", "read"),
+            ),
+            _tool(
+                "list_class_members",
+                "List the members of an Education class.",
+                ListClassMembersArgs,
+                self._handlers.list_class_members,
+                domain=self.metadata.name,
+                tags=("education", "class", "members", "read"),
+            ),
+            _tool(
+                "list_education_assignments",
+                "List the assignments of an Education class.",
+                ListClassAssignmentsArgs,
+                self._handlers.list_education_assignments,
+                domain=self.metadata.name,
+                tags=("education", "class", "assignments", "read"),
+            ),
+            _tool(
+                "get_education_user",
+                "Get an Education user by ID or userPrincipalName.",
+                GetEducationUserArgs,
+                self._handlers.get_education_user,
+                domain=self.metadata.name,
+                tags=("education", "user", "read"),
+            ),
+        ]
+
+
+class CloudPcDomain(GraphDomain):
+    metadata = DomainMetadata(
+        name="cloud_pc",
+        display_name="Cloud PC (Windows 365)",
+        description=(
+            "Windows 365 Cloud PCs: list and get Cloud PCs, list provisioning policies, and "
+            "trigger reboot or reprovision actions on a Cloud PC."
+        ),
+        required_permissions=(
+            "CloudPC.Read.All",
+            "CloudPC.ReadWrite.All",
+        ),
+        tags=("cloud pc", "windows 365", "endpoint", "virtual desktop"),
+    )
+
+    def __init__(self, handlers: Any) -> None:
+        self._handlers = handlers
+
+    def tools(self) -> list[ToolDefinition]:
+        return [
+            _tool(
+                "list_cloud_pcs",
+                "List Windows 365 Cloud PCs.",
+                PaginationArgs,
+                self._handlers.list_cloud_pcs,
+                domain=self.metadata.name,
+                tags=("cloud pc", "list", "read"),
+            ),
+            _tool(
+                "get_cloud_pc",
+                "Get a Windows 365 Cloud PC by ID.",
+                GetCloudPcArgs,
+                self._handlers.get_cloud_pc,
+                domain=self.metadata.name,
+                tags=("cloud pc", "get", "read"),
+            ),
+            _tool(
+                "list_cloud_pc_provisioning_policies",
+                "List Cloud PC provisioning policies.",
+                PaginationArgs,
+                self._handlers.list_cloud_pc_provisioning_policies,
+                domain=self.metadata.name,
+                tags=("cloud pc", "provisioning", "policies", "read"),
+            ),
+            _tool(
+                "reboot_cloud_pc",
+                "Reboot a Cloud PC.",
+                RebootCloudPcArgs,
+                self._handlers.reboot_cloud_pc,
+                read_only=False,
+                requires_confirmation=True,
+                domain=self.metadata.name,
+                safety="mutation",
+                tags=("cloud pc", "reboot", "mutation"),
+            ),
+            _tool(
+                "reprovision_cloud_pc",
+                "Reprovision a Cloud PC (destructive — resets the device).",
+                ReprovisionCloudPcArgs,
+                self._handlers.reprovision_cloud_pc,
+                read_only=False,
+                requires_confirmation=True,
+                domain=self.metadata.name,
+                safety="destructive",
+                tags=("cloud pc", "reprovision", "destructive"),
+            ),
+        ]
+
+
+class VivaDomain(GraphDomain):
+    metadata = DomainMetadata(
+        name="viva",
+        display_name="Viva",
+        description=(
+            "Microsoft Viva employee experience: list Viva Engage communities, list learning "
+            "course activities, and list learning providers. Read-only."
+        ),
+        required_permissions=(
+            "Community.Read.All",
+            "LearningContent.Read.All",
+            "LearningAssignedCourse.Read",
+        ),
+        tags=("viva", "engage", "learning", "employee experience", "m365"),
+    )
+
+    def __init__(self, handlers: Any) -> None:
+        self._handlers = handlers
+
+    def tools(self) -> list[ToolDefinition]:
+        return [
+            _tool(
+                "list_engage_communities",
+                "List Viva Engage communities.",
+                PaginationArgs,
+                self._handlers.list_engage_communities,
+                domain=self.metadata.name,
+                tags=("viva", "engage", "communities", "read"),
+            ),
+            _tool(
+                "get_engage_community",
+                "Get a Viva Engage community by ID.",
+                GetEngageCommunityArgs,
+                self._handlers.get_engage_community,
+                domain=self.metadata.name,
+                tags=("viva", "engage", "community", "read"),
+            ),
+            _tool(
+                "list_learning_course_activities",
+                "List Viva Learning course activities for the tenant.",
+                PaginationArgs,
+                self._handlers.list_learning_course_activities,
+                domain=self.metadata.name,
+                tags=("viva", "learning", "courses", "read"),
+            ),
+            _tool(
+                "list_learning_providers",
+                "List Viva Learning content providers.",
+                PaginationArgs,
+                self._handlers.list_learning_providers,
+                domain=self.metadata.name,
+                tags=("viva", "learning", "providers", "read"),
+            ),
+        ]
+
+
+class PlacesDomain(GraphDomain):
+    metadata = DomainMetadata(
+        name="places",
+        display_name="Places",
+        description=(
+            "Microsoft Places: list places, rooms, room lists, and workspaces (desks). "
+            "Read-only."
+        ),
+        required_permissions=("Place.Read.All",),
+        tags=("places", "rooms", "desks", "workspaces", "facilities"),
+    )
+
+    def __init__(self, handlers: Any) -> None:
+        self._handlers = handlers
+
+    def tools(self) -> list[ToolDefinition]:
+        return [
+            _tool(
+                "list_places",
+                "List Microsoft Places (rooms, workspaces, and room lists).",
+                PaginationArgs,
+                self._handlers.list_places,
+                domain=self.metadata.name,
+                tags=("places", "list", "read"),
+            ),
+            _tool(
+                "list_rooms",
+                "List Microsoft Places rooms.",
+                PaginationArgs,
+                self._handlers.list_rooms,
+                domain=self.metadata.name,
+                tags=("places", "rooms", "read"),
+            ),
+            _tool(
+                "list_room_lists",
+                "List Microsoft Places room lists.",
+                PaginationArgs,
+                self._handlers.list_room_lists,
+                domain=self.metadata.name,
+                tags=("places", "room lists", "read"),
+            ),
+            _tool(
+                "list_workspaces",
+                "List Microsoft Places workspaces (desks and shared spaces).",
+                PaginationArgs,
+                self._handlers.list_workspaces,
+                domain=self.metadata.name,
+                tags=("places", "workspaces", "desks", "read"),
+            ),
+        ]
+
+
+class ChangeNotificationsDomain(GraphDomain):
+    metadata = DomainMetadata(
+        name="change_notifications",
+        display_name="Change Notifications",
+        description=(
+            "Microsoft Graph change notifications (webhooks): list and inspect subscriptions, "
+            "create new subscriptions, renew them, and delete them."
+        ),
+        required_permissions=(),
+        tags=("change notifications", "webhooks", "subscriptions", "infrastructure"),
+    )
+
+    def __init__(self, handlers: Any) -> None:
+        self._handlers = handlers
+
+    def tools(self) -> list[ToolDefinition]:
+        return [
+            _tool(
+                "list_subscriptions",
+                "List Microsoft Graph change-notification subscriptions.",
+                PaginationArgs,
+                self._handlers.list_subscriptions,
+                domain=self.metadata.name,
+                tags=("change notifications", "subscriptions", "read"),
+            ),
+            _tool(
+                "get_subscription",
+                "Get a change-notification subscription by ID.",
+                GetSubscriptionArgs,
+                self._handlers.get_subscription,
+                domain=self.metadata.name,
+                tags=("change notifications", "subscription", "read"),
+            ),
+            _tool(
+                "create_subscription",
+                "Create a change-notification subscription (webhook).",
+                CreateSubscriptionArgs,
+                self._handlers.create_subscription,
+                read_only=False,
+                requires_confirmation=True,
+                domain=self.metadata.name,
+                safety="mutation",
+                tags=("change notifications", "subscription", "create", "mutation"),
+            ),
+            _tool(
+                "renew_subscription",
+                "Extend the expiration of a change-notification subscription.",
+                RenewSubscriptionArgs,
+                self._handlers.renew_subscription,
+                read_only=False,
+                requires_confirmation=True,
+                domain=self.metadata.name,
+                safety="mutation",
+                tags=("change notifications", "subscription", "renew", "mutation"),
+            ),
+            _tool(
+                "delete_subscription",
+                "Delete a change-notification subscription.",
+                DeleteSubscriptionArgs,
+                self._handlers.delete_subscription,
+                read_only=False,
+                requires_confirmation=True,
+                domain=self.metadata.name,
+                safety="destructive",
+                tags=("change notifications", "subscription", "delete", "destructive"),
+            ),
+        ]
+
+
 class GraphToolFactory:
     """Builds the tool registry and implements every Graph tool handler."""
 
@@ -2482,6 +2959,12 @@ class GraphToolFactory:
             OnlineMeetingsDomain(self),
             BookingsDomain(self),
             SearchDomain(self),
+            UniversalPrintDomain(self),
+            EducationDomain(self),
+            CloudPcDomain(self),
+            VivaDomain(self),
+            PlacesDomain(self),
+            ChangeNotificationsDomain(self),
             CatalogOperationDomain(self),
         ]:
             registry.register_domain(domain)
@@ -3360,6 +3843,193 @@ class GraphToolFactory:
             ]
         }
         return await self._client.request("POST", "/search/query", json_data=body)
+
+    async def list_printers(self, args: PaginationArgs) -> Any:
+        return await self._client.request_collection(
+            "/print/printers",
+            params=_pagination_params(args),
+            all_pages=args.all_pages,
+            max_pages=args.max_pages,
+        )
+
+    async def get_printer(self, args: GetPrinterArgs) -> Any:
+        return await self._client.request("GET", f"/print/printers/{args.printer_id}")
+
+    async def list_printer_shares(self, args: PaginationArgs) -> Any:
+        return await self._client.request_collection(
+            "/print/printerShares",
+            params=_pagination_params(args),
+            all_pages=args.all_pages,
+            max_pages=args.max_pages,
+        )
+
+    async def list_print_jobs(self, args: ListPrintJobsArgs) -> Any:
+        return await self._client.request_collection(
+            f"/print/printers/{args.printer_id}/jobs"
+        )
+
+    async def cancel_print_job(self, args: CancelPrintJobArgs) -> Any:
+        return await self._client.request(
+            "POST",
+            f"/print/printers/{args.printer_id}/jobs/{args.job_id}/cancelPrintJob",
+        )
+
+    async def list_education_schools(self, args: PaginationArgs) -> Any:
+        return await self._client.request_collection(
+            "/education/schools",
+            params=_pagination_params(args),
+            all_pages=args.all_pages,
+            max_pages=args.max_pages,
+        )
+
+    async def list_education_classes(self, args: PaginationArgs) -> Any:
+        return await self._client.request_collection(
+            "/education/classes",
+            params=_pagination_params(args),
+            all_pages=args.all_pages,
+            max_pages=args.max_pages,
+        )
+
+    async def list_class_members(self, args: ListClassMembersArgs) -> Any:
+        return await self._client.request_collection(
+            f"/education/classes/{args.class_id}/members"
+        )
+
+    async def list_education_assignments(self, args: ListClassAssignmentsArgs) -> Any:
+        return await self._client.request_collection(
+            f"/education/classes/{args.class_id}/assignments"
+        )
+
+    async def get_education_user(self, args: GetEducationUserArgs) -> Any:
+        return await self._client.request("GET", f"/education/users/{args.user_id}")
+
+    async def list_cloud_pcs(self, args: PaginationArgs) -> Any:
+        return await self._client.request_collection(
+            "/deviceManagement/virtualEndpoint/cloudPCs",
+            params=_pagination_params(args),
+            all_pages=args.all_pages,
+            max_pages=args.max_pages,
+        )
+
+    async def get_cloud_pc(self, args: GetCloudPcArgs) -> Any:
+        return await self._client.request(
+            "GET", f"/deviceManagement/virtualEndpoint/cloudPCs/{args.cloud_pc_id}"
+        )
+
+    async def list_cloud_pc_provisioning_policies(self, args: PaginationArgs) -> Any:
+        return await self._client.request_collection(
+            "/deviceManagement/virtualEndpoint/provisioningPolicies",
+            params=_pagination_params(args),
+            all_pages=args.all_pages,
+            max_pages=args.max_pages,
+        )
+
+    async def reboot_cloud_pc(self, args: RebootCloudPcArgs) -> Any:
+        return await self._client.request(
+            "POST",
+            f"/deviceManagement/virtualEndpoint/cloudPCs/{args.cloud_pc_id}/reboot",
+        )
+
+    async def reprovision_cloud_pc(self, args: ReprovisionCloudPcArgs) -> Any:
+        return await self._client.request(
+            "POST",
+            f"/deviceManagement/virtualEndpoint/cloudPCs/{args.cloud_pc_id}/reprovision",
+        )
+
+    async def list_engage_communities(self, args: PaginationArgs) -> Any:
+        return await self._client.request_collection(
+            "/employeeExperience/communities",
+            params=_pagination_params(args),
+            all_pages=args.all_pages,
+            max_pages=args.max_pages,
+        )
+
+    async def get_engage_community(self, args: GetEngageCommunityArgs) -> Any:
+        return await self._client.request(
+            "GET", f"/employeeExperience/communities/{args.community_id}"
+        )
+
+    async def list_learning_course_activities(self, args: PaginationArgs) -> Any:
+        return await self._client.request_collection(
+            "/employeeExperience/learningCourseActivities",
+            params=_pagination_params(args),
+            all_pages=args.all_pages,
+            max_pages=args.max_pages,
+        )
+
+    async def list_learning_providers(self, args: PaginationArgs) -> Any:
+        return await self._client.request_collection(
+            "/employeeExperience/learningProviders",
+            params=_pagination_params(args),
+            all_pages=args.all_pages,
+            max_pages=args.max_pages,
+        )
+
+    async def list_places(self, args: PaginationArgs) -> Any:
+        return await self._client.request_collection(
+            "/places",
+            params=_pagination_params(args),
+            all_pages=args.all_pages,
+            max_pages=args.max_pages,
+        )
+
+    async def list_rooms(self, args: PaginationArgs) -> Any:
+        return await self._client.request_collection(
+            "/places/microsoft.graph.room",
+            params=_pagination_params(args),
+            all_pages=args.all_pages,
+            max_pages=args.max_pages,
+        )
+
+    async def list_room_lists(self, args: PaginationArgs) -> Any:
+        return await self._client.request_collection(
+            "/places/microsoft.graph.roomList",
+            params=_pagination_params(args),
+            all_pages=args.all_pages,
+            max_pages=args.max_pages,
+        )
+
+    async def list_workspaces(self, args: PaginationArgs) -> Any:
+        return await self._client.request_collection(
+            "/places/microsoft.graph.workspace",
+            params=_pagination_params(args),
+            all_pages=args.all_pages,
+            max_pages=args.max_pages,
+        )
+
+    async def list_subscriptions(self, args: PaginationArgs) -> Any:
+        return await self._client.request_collection(
+            "/subscriptions",
+            params=_pagination_params(args),
+            all_pages=args.all_pages,
+            max_pages=args.max_pages,
+        )
+
+    async def get_subscription(self, args: GetSubscriptionArgs) -> Any:
+        return await self._client.request("GET", f"/subscriptions/{args.subscription_id}")
+
+    async def create_subscription(self, args: CreateSubscriptionArgs) -> Any:
+        body: dict[str, Any] = {
+            "changeType": args.change_type,
+            "notificationUrl": args.notification_url,
+            "resource": args.resource,
+            "expirationDateTime": args.expiration_date_time,
+        }
+        if args.client_state:
+            body["clientState"] = args.client_state
+        return await self._client.request("POST", "/subscriptions", json_data=body)
+
+    async def renew_subscription(self, args: RenewSubscriptionArgs) -> Any:
+        return await self._client.request(
+            "PATCH",
+            f"/subscriptions/{args.subscription_id}",
+            json_data={"expirationDateTime": args.expiration_date_time},
+        )
+
+    async def delete_subscription(self, args: DeleteSubscriptionArgs) -> Any:
+        return await self._client.request(
+            "DELETE", f"/subscriptions/{args.subscription_id}"
+        )
 
     async def graph_operation(self, args: GenericGraphOperationArgs) -> Any:
         """Execute a cataloged Graph operation, enforcing confirmation and path-param validation."""

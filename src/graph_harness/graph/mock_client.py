@@ -320,6 +320,64 @@ class MockGraphClient:
         self.search_hits = [
             {"hitId": "msg-1", "rank": 1, "summary": "Q2 planning"},
         ]
+        self.printers = [
+            {"id": "printer-1", "displayName": "Main office printer", "status": {"state": "idle"}},
+        ]
+        self.printer_shares = [
+            {"id": "share-1", "displayName": "Main office printer (Marketing)"},
+        ]
+        self.print_jobs = [
+            {"id": "job-1", "status": {"state": "processing"}, "documentName": "Report.pdf"},
+        ]
+        self.education_schools = [
+            {"id": "school-1", "displayName": "Contoso High School"},
+        ]
+        self.education_classes = [
+            {"id": "class-1", "displayName": "Math 101", "grade": "10"},
+        ]
+        self.education_class_members = [
+            {"id": "edu-user-1", "displayName": "Sam Student"},
+        ]
+        self.education_assignments = [
+            {"id": "assign-1", "displayName": "Chapter 3 problems"},
+        ]
+        self.education_users = [
+            {"id": "edu-user-1", "displayName": "Sam Student", "primaryRole": "student"},
+        ]
+        self.cloud_pcs = [
+            {"id": "cpc-1", "displayName": "ADA-CPC", "status": "provisioned"},
+        ]
+        self.cloud_pc_provisioning_policies = [
+            {"id": "cpcpol-1", "displayName": "Knowledge worker"},
+        ]
+        self.engage_communities = [
+            {"id": "comm-1", "displayName": "All Hands"},
+        ]
+        self.learning_course_activities = [
+            {"id": "lc-1", "courseTitle": "Security fundamentals", "status": "completed"},
+        ]
+        self.learning_providers = [
+            {"id": "lp-1", "displayName": "Microsoft Learn"},
+        ]
+        self.places = [
+            {"id": "room-1", "displayName": "Conf Room 1", "@odata.type": "#microsoft.graph.room"},
+        ]
+        self.rooms = [
+            {"id": "room-1", "displayName": "Conf Room 1", "capacity": 8},
+        ]
+        self.room_lists = [
+            {"id": "roomlist-1", "displayName": "Building A"},
+        ]
+        self.workspaces = [
+            {"id": "ws-1", "displayName": "Hot desk A-12"},
+        ]
+        self.subscriptions = [
+            {
+                "id": "sub-1",
+                "resource": "me/mailFolders/Inbox/messages",
+                "changeType": "created",
+            },
+        ]
 
     async def request(
         self,
@@ -512,6 +570,73 @@ class MockGraphClient:
             return {"value": [{"hitsContainers": [{"hits": self.search_hits, "total": 1}]}]}
         if method == "POST" and endpoint.endswith("/extractSensitivityLabels"):
             return {"labels": [{"sensitivityLabelId": "label-conf"}]}
+
+        if method == "GET" and endpoint == "/print/printers":
+            return {"value": self._top(self.printers, params)}
+        if (
+            method == "GET"
+            and endpoint.startswith("/print/printers/")
+            and endpoint.endswith("/jobs")
+        ):
+            return {"value": self._top(self.print_jobs, params)}
+        if method == "GET" and endpoint.startswith("/print/printers/"):
+            return self._get_by_identifier(
+                self.printers, endpoint.removeprefix("/print/printers/")
+            )
+        if method == "GET" and endpoint == "/print/printerShares":
+            return {"value": self._top(self.printer_shares, params)}
+        if method == "GET" and endpoint == "/education/schools":
+            return {"value": self._top(self.education_schools, params)}
+        if method == "GET" and endpoint == "/education/classes":
+            return {"value": self._top(self.education_classes, params)}
+        if method == "GET" and endpoint.startswith("/education/classes/"):
+            tail = endpoint.removeprefix("/education/classes/")
+            if tail.endswith("/members"):
+                return {"value": self._top(self.education_class_members, params)}
+            if tail.endswith("/assignments"):
+                return {"value": self._top(self.education_assignments, params)}
+            return self._get_by_identifier(self.education_classes, tail)
+        if method == "GET" and endpoint.startswith("/education/users/"):
+            return self._get_by_identifier(
+                self.education_users, endpoint.removeprefix("/education/users/")
+            )
+        if method == "GET" and endpoint == "/deviceManagement/virtualEndpoint/cloudPCs":
+            return {"value": self._top(self.cloud_pcs, params)}
+        if method == "GET" and endpoint.startswith("/deviceManagement/virtualEndpoint/cloudPCs/"):
+            return self._get_by_identifier(
+                self.cloud_pcs,
+                endpoint.removeprefix("/deviceManagement/virtualEndpoint/cloudPCs/"),
+            )
+        if (
+            method == "GET"
+            and endpoint == "/deviceManagement/virtualEndpoint/provisioningPolicies"
+        ):
+            return {"value": self._top(self.cloud_pc_provisioning_policies, params)}
+        if method == "GET" and endpoint == "/employeeExperience/communities":
+            return {"value": self._top(self.engage_communities, params)}
+        if method == "GET" and endpoint.startswith("/employeeExperience/communities/"):
+            return self._get_by_identifier(
+                self.engage_communities,
+                endpoint.removeprefix("/employeeExperience/communities/"),
+            )
+        if method == "GET" and endpoint == "/employeeExperience/learningCourseActivities":
+            return {"value": self._top(self.learning_course_activities, params)}
+        if method == "GET" and endpoint == "/employeeExperience/learningProviders":
+            return {"value": self._top(self.learning_providers, params)}
+        if method == "GET" and endpoint == "/places":
+            return {"value": self._top(self.places, params)}
+        if method == "GET" and endpoint == "/places/microsoft.graph.room":
+            return {"value": self._top(self.rooms, params)}
+        if method == "GET" and endpoint == "/places/microsoft.graph.roomList":
+            return {"value": self._top(self.room_lists, params)}
+        if method == "GET" and endpoint == "/places/microsoft.graph.workspace":
+            return {"value": self._top(self.workspaces, params)}
+        if method == "GET" and endpoint == "/subscriptions":
+            return {"value": self._top(self.subscriptions, params)}
+        if method == "GET" and endpoint.startswith("/subscriptions/"):
+            return self._get_by_identifier(
+                self.subscriptions, endpoint.removeprefix("/subscriptions/")
+            )
 
         if method == "GET" and endpoint == "/users":
             result = self._filter_entities(self.users, params)
