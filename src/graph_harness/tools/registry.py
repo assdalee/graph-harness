@@ -83,12 +83,17 @@ class ToolRegistry:
         if not tokens:
             return self.list()
 
+        # Anchor on the domain of any tool the query names verbatim (e.g. recovery
+        # instructions like "Tool `list_users` failed"). An exact tool reference is a
+        # much stronger signal than incidental token overlap with adjacent domains.
+        lowered_query = query.lower()
+        anchor_domains = {tool.domain for tool in self.list() if tool.name.lower() in lowered_query}
+
         domain_scores = [
             (
                 self._score_domain(domain, tokens)
-                + sum(
-                    self._score_tool(tool, tokens) for tool in self.tools_for_domain(domain.name)
-                ),
+                + sum(self._score_tool(tool, tokens) for tool in self.tools_for_domain(domain.name))
+                + (100 if domain.name in anchor_domains else 0),
                 domain,
             )
             for domain in self.list_domains()

@@ -215,6 +215,63 @@ class MockGraphClient:
             {"id": "dc-wifi", "displayName": "Corp Wi-Fi profile"},
             {"id": "dc-vpn", "displayName": "Corp VPN profile"},
         ]
+        self.chats = [
+            {"id": "chat-1", "topic": "Project Apollo", "chatType": "group"},
+        ]
+        self.chat_messages = [
+            {"id": "cm-1", "body": {"content": "Standup at 10?"}, "from": "ada@example.com"},
+        ]
+        self.sites = [
+            {
+                "id": "site-root",
+                "displayName": "Communication site",
+                "webUrl": "https://contoso.sharepoint.com",
+            },
+        ]
+        self.site_lists = [
+            {"id": "list-docs", "displayName": "Documents"},
+        ]
+        self.list_items = [
+            {"id": "item-1", "fields": {"Title": "Q2 plan"}},
+        ]
+        self.notebooks = [
+            {"id": "nb-1", "displayName": "Team Notebook"},
+        ]
+        self.notebook_sections = [
+            {"id": "sec-1", "displayName": "Meetings"},
+        ]
+        self.section_pages = [
+            {"id": "pg-1", "title": "Kickoff notes"},
+        ]
+        self.contacts_fixture = [
+            {
+                "id": "contact-1",
+                "displayName": "Grace Hopper",
+                "givenName": "Grace",
+                "surname": "Hopper",
+            },
+        ]
+        self.planner_plans = [
+            {"id": "plan-1", "title": "Launch plan"},
+        ]
+        self.planner_tasks = [
+            {"id": "ptask-1", "planId": "plan-1", "title": "Draft brief"},
+        ]
+        self.todo_lists = [
+            {"id": "tdl-1", "displayName": "Tasks"},
+        ]
+        self.todo_tasks = [
+            {"id": "tdt-1", "title": "Review PR"},
+        ]
+        self.service_health_overviews = [
+            {"id": "Exchange", "service": "Exchange Online", "status": "serviceOperational"},
+        ]
+        self.service_health_issues = [
+            {"id": "EX123", "title": "Delays in email delivery", "status": "serviceDegradation"},
+        ]
+        self.service_messages = [
+            {"id": "MC123", "title": "Upcoming change to Teams", "category": "planForChange"},
+        ]
 
     async def request(
         self,
@@ -302,12 +359,55 @@ class MockGraphClient:
                     return self._get_by_identifier(
                         self.drive_items, rest.removeprefix("drive/items/")
                     )
+                if rest == "chats":
+                    return {"value": self._top(self.chats, params)}
+                if rest == "contacts":
+                    return {"value": self._top(self.contacts_fixture, params)}
+                if rest.startswith("contacts/"):
+                    return self._get_by_identifier(
+                        self.contacts_fixture, rest.removeprefix("contacts/")
+                    )
+                if rest == "onenote/notebooks":
+                    return {"value": self._top(self.notebooks, params)}
+                if rest.startswith("onenote/notebooks/") and rest.endswith("/sections"):
+                    return {"value": self._top(self.notebook_sections, params)}
+                if rest.startswith("onenote/sections/") and rest.endswith("/pages"):
+                    return {"value": self._top(self.section_pages, params)}
+                if rest == "todo/lists":
+                    return {"value": self._top(self.todo_lists, params)}
+                if rest.startswith("todo/lists/") and rest.endswith("/tasks"):
+                    return {"value": self._top(self.todo_tasks, params)}
         if method == "GET" and endpoint.startswith("/teams/"):
             tail = endpoint.removeprefix("/teams/")
             if tail.endswith("/channels"):
                 return {"value": self._top(self.channels, params)}
             if "/channels/" in tail and tail.endswith("/messages"):
                 return {"value": self._top(self.channel_messages, params)}
+
+        if method == "GET" and endpoint.startswith("/chats/") and endpoint.endswith("/messages"):
+            return {"value": self._top(self.chat_messages, params)}
+        if method == "GET" and endpoint == "/sites":
+            return {"value": self._top(self.sites, params)}
+        if method == "GET" and endpoint.startswith("/sites/"):
+            tail = endpoint.removeprefix("/sites/")
+            if tail.endswith("/lists"):
+                return {"value": self._top(self.site_lists, params)}
+            if "/lists/" in tail and tail.endswith("/items"):
+                return {"value": self._top(self.list_items, params)}
+            return self._get_by_identifier(self.sites, tail)
+        if method == "GET" and endpoint.startswith("/planner/plans/"):
+            tail = endpoint.removeprefix("/planner/plans/")
+            if tail.endswith("/tasks"):
+                return {"value": self._top(self.planner_tasks, params)}
+            return self._get_by_identifier(self.planner_plans, tail)
+        if method == "GET" and endpoint.startswith("/reports/"):
+            return {"value": [{"reportRefreshDate": "2026-05-13", "note": "mock usage report"}]}
+        if method == "GET" and endpoint == "/admin/serviceAnnouncement/healthOverviews":
+            return {"value": self._top(self.service_health_overviews, params)}
+        if method == "GET" and endpoint == "/admin/serviceAnnouncement/issues":
+            return {"value": self._top(self.service_health_issues, params)}
+        if method == "GET" and endpoint == "/admin/serviceAnnouncement/messages":
+            return {"value": self._top(self.service_messages, params)}
 
         if method == "GET" and endpoint == "/users":
             result = self._filter_entities(self.users, params)
@@ -316,6 +416,12 @@ class MockGraphClient:
             return self._get_by_identifier(self.users, endpoint.removeprefix("/users/"))
         if method == "GET" and endpoint == "/groups":
             return {"value": self._filter_entities(self.groups, params)}
+        if (
+            method == "GET"
+            and endpoint.startswith("/groups/")
+            and endpoint.endswith("/planner/plans")
+        ):
+            return {"value": self._top(self.planner_plans, params)}
         if method == "GET" and endpoint.startswith("/groups/"):
             return self._get_by_identifier(self.groups, endpoint.removeprefix("/groups/"))
         if method == "GET" and endpoint == "/security/alerts_v2":

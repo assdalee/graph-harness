@@ -425,6 +425,157 @@ class SyncManagedDeviceArgs(ConfirmableArgs):
     device_id: str = Field(description="Intune managed device ID.")
 
 
+# --- Tier-1 collaboration, productivity, and reporting ---------------------
+
+
+class ListUserChatsArgs(PaginationArgs):
+    """Input for listing a user's Teams chats."""
+
+    user_id: str = Field(description="User object ID or userPrincipalName.")
+
+
+class ListChatMessagesArgs(PaginationArgs):
+    """Input for listing the messages in a Teams chat."""
+
+    chat_id: str = Field(description="Teams chat ID.")
+
+
+class SendChatMessageArgs(ConfirmableArgs):
+    """Confirmable input for sending a message to a Teams chat."""
+
+    chat_id: str = Field(description="Teams chat ID.")
+    content: str = Field(description="Message body content.")
+
+
+class ListSitesArgs(PaginationArgs):
+    """Input for listing SharePoint sites."""
+
+
+class GetSiteArgs(BaseModel):
+    """Input for fetching a single SharePoint site by ID."""
+
+    site_id: str = Field(description="SharePoint site ID.")
+
+
+class ListSiteListsArgs(BaseModel):
+    """Input for listing the lists in a SharePoint site."""
+
+    site_id: str = Field(description="SharePoint site ID.")
+
+
+class ListListItemsArgs(BaseModel):
+    """Input for listing the items in a SharePoint list."""
+
+    site_id: str = Field(description="SharePoint site ID.")
+    list_id: str = Field(description="SharePoint list ID.")
+
+
+class CreateListItemArgs(ConfirmableArgs):
+    """Confirmable input for creating an item in a SharePoint list."""
+
+    site_id: str = Field(description="SharePoint site ID.")
+    list_id: str = Field(description="SharePoint list ID.")
+    fields: dict[str, Any] = Field(description="Field name/value pairs for the new list item.")
+
+
+class ListNotebooksArgs(BaseModel):
+    """Input for listing a user's OneNote notebooks."""
+
+    user_id: str = Field(description="User object ID or userPrincipalName.")
+
+
+class ListNotebookSectionsArgs(BaseModel):
+    """Input for listing the sections in a OneNote notebook."""
+
+    user_id: str = Field(description="User object ID or userPrincipalName.")
+    notebook_id: str = Field(description="OneNote notebook ID.")
+
+
+class ListSectionPagesArgs(BaseModel):
+    """Input for listing the pages in a OneNote section."""
+
+    user_id: str = Field(description="User object ID or userPrincipalName.")
+    section_id: str = Field(description="OneNote section ID.")
+
+
+class ListContactsArgs(PaginationArgs):
+    """Input for listing a user's contacts."""
+
+    user_id: str = Field(description="User object ID or userPrincipalName.")
+
+
+class GetContactArgs(BaseModel):
+    """Input for fetching a single contact."""
+
+    user_id: str = Field(description="User object ID or userPrincipalName.")
+    contact_id: str = Field(description="Contact ID.")
+
+
+class CreateContactArgs(ConfirmableArgs):
+    """Confirmable input for creating a contact for a user."""
+
+    user_id: str = Field(description="User object ID or userPrincipalName.")
+    given_name: str = Field(description="Contact given (first) name.")
+    surname: str = Field(description="Contact surname (last name).")
+    email: str = Field(description="Contact email address.")
+
+
+class ListGroupPlansArgs(BaseModel):
+    """Input for listing the Planner plans owned by a group."""
+
+    group_id: str = Field(description="Group (team) ID that owns the plans.")
+
+
+class GetPlanArgs(BaseModel):
+    """Input for fetching a single Planner plan by ID."""
+
+    plan_id: str = Field(description="Planner plan ID.")
+
+
+class ListPlanTasksArgs(BaseModel):
+    """Input for listing the tasks in a Planner plan."""
+
+    plan_id: str = Field(description="Planner plan ID.")
+
+
+class CreatePlannerTaskArgs(ConfirmableArgs):
+    """Confirmable input for creating a Planner task."""
+
+    plan_id: str = Field(description="Planner plan ID to add the task to.")
+    title: str = Field(description="Task title.")
+    bucket_id: str | None = Field(default=None, description="Optional Planner bucket ID.")
+
+
+class ListTodoListsArgs(BaseModel):
+    """Input for listing a user's To Do lists."""
+
+    user_id: str = Field(description="User object ID or userPrincipalName.")
+
+
+class ListTodoTasksArgs(BaseModel):
+    """Input for listing the tasks in a To Do list."""
+
+    user_id: str = Field(description="User object ID or userPrincipalName.")
+    list_id: str = Field(description="To Do list ID.")
+
+
+class CreateTodoTaskArgs(ConfirmableArgs):
+    """Confirmable input for creating a To Do task."""
+
+    user_id: str = Field(description="User object ID or userPrincipalName.")
+    list_id: str = Field(description="To Do list ID.")
+    title: str = Field(description="Task title.")
+
+
+ReportPeriod = Literal["D7", "D30", "D90", "D180"]
+
+
+class ReportPeriodArgs(BaseModel):
+    """Input selecting the aggregation period for a usage report."""
+
+    period: ReportPeriod = "D7"
+
+
 class IdentityAccessDomain(GraphDomain):
     """Graph domain exposing user, group, app, and OAuth identity tools."""
 
@@ -1360,6 +1511,417 @@ class DeviceManagementDomain(GraphDomain):
         ]
 
 
+class ChatsDomain(GraphDomain):
+    metadata = DomainMetadata(
+        name="chats",
+        display_name="Chats",
+        description=(
+            "Microsoft Teams chats: list a user's chats, read chat messages, and send a "
+            "message to a chat."
+        ),
+        required_permissions=(
+            "Chat.Read.All",
+            "Chat.ReadWrite.All",
+            "ChatMessage.Send",
+        ),
+        tags=("chats", "teams", "messages", "collaboration", "m365"),
+    )
+
+    def __init__(self, handlers: Any) -> None:
+        self._handlers = handlers
+
+    def tools(self) -> list[ToolDefinition]:
+        return [
+            _tool(
+                "list_user_chats",
+                "List a user's Teams chats.",
+                ListUserChatsArgs,
+                self._handlers.list_user_chats,
+                domain=self.metadata.name,
+                tags=("chats", "teams", "read"),
+            ),
+            _tool(
+                "list_chat_messages",
+                "List the messages in a Teams chat.",
+                ListChatMessagesArgs,
+                self._handlers.list_chat_messages,
+                domain=self.metadata.name,
+                tags=("chats", "teams", "messages", "read"),
+            ),
+            _tool(
+                "send_chat_message",
+                "Send a message to a Teams chat.",
+                SendChatMessageArgs,
+                self._handlers.send_chat_message,
+                read_only=False,
+                requires_confirmation=True,
+                domain=self.metadata.name,
+                safety="mutation",
+                tags=("chats", "teams", "message", "send", "mutation"),
+            ),
+        ]
+
+
+class SharePointSitesDomain(GraphDomain):
+    metadata = DomainMetadata(
+        name="sharepoint_sites",
+        display_name="SharePoint Sites",
+        description=(
+            "SharePoint sites: list and inspect sites, list a site's lists and list items, "
+            "and create a new list item."
+        ),
+        required_permissions=(
+            "Sites.Read.All",
+            "Sites.ReadWrite.All",
+        ),
+        tags=("sharepoint", "sites", "lists", "documents", "m365"),
+    )
+
+    def __init__(self, handlers: Any) -> None:
+        self._handlers = handlers
+
+    def tools(self) -> list[ToolDefinition]:
+        return [
+            _tool(
+                "list_sites",
+                "List SharePoint sites.",
+                ListSitesArgs,
+                self._handlers.list_sites,
+                domain=self.metadata.name,
+                tags=("sharepoint", "sites", "read"),
+            ),
+            _tool(
+                "get_site",
+                "Get a SharePoint site by ID.",
+                GetSiteArgs,
+                self._handlers.get_site,
+                domain=self.metadata.name,
+                tags=("sharepoint", "site", "read"),
+            ),
+            _tool(
+                "list_site_lists",
+                "List the lists in a SharePoint site.",
+                ListSiteListsArgs,
+                self._handlers.list_site_lists,
+                domain=self.metadata.name,
+                tags=("sharepoint", "lists", "read"),
+            ),
+            _tool(
+                "list_list_items",
+                "List the items in a SharePoint list.",
+                ListListItemsArgs,
+                self._handlers.list_list_items,
+                domain=self.metadata.name,
+                tags=("sharepoint", "list", "items", "read"),
+            ),
+            _tool(
+                "create_list_item",
+                "Create an item in a SharePoint list.",
+                CreateListItemArgs,
+                self._handlers.create_list_item,
+                read_only=False,
+                requires_confirmation=True,
+                domain=self.metadata.name,
+                safety="mutation",
+                tags=("sharepoint", "list", "item", "create", "mutation"),
+            ),
+        ]
+
+
+class OneNoteDomain(GraphDomain):
+    metadata = DomainMetadata(
+        name="onenote",
+        display_name="OneNote",
+        description=(
+            "Microsoft OneNote: list a user's notebooks, the sections in a notebook, and the "
+            "pages in a section. Read-only."
+        ),
+        required_permissions=("Notes.Read.All",),
+        tags=("onenote", "notebooks", "notes", "m365"),
+    )
+
+    def __init__(self, handlers: Any) -> None:
+        self._handlers = handlers
+
+    def tools(self) -> list[ToolDefinition]:
+        return [
+            _tool(
+                "list_notebooks",
+                "List a user's OneNote notebooks.",
+                ListNotebooksArgs,
+                self._handlers.list_notebooks,
+                domain=self.metadata.name,
+                tags=("onenote", "notebooks", "read"),
+            ),
+            _tool(
+                "list_notebook_sections",
+                "List the sections in a OneNote notebook.",
+                ListNotebookSectionsArgs,
+                self._handlers.list_notebook_sections,
+                domain=self.metadata.name,
+                tags=("onenote", "sections", "read"),
+            ),
+            _tool(
+                "list_section_pages",
+                "List the pages in a OneNote section.",
+                ListSectionPagesArgs,
+                self._handlers.list_section_pages,
+                domain=self.metadata.name,
+                tags=("onenote", "pages", "read"),
+            ),
+        ]
+
+
+class ContactsDomain(GraphDomain):
+    metadata = DomainMetadata(
+        name="contacts",
+        display_name="Contacts",
+        description=(
+            "Microsoft 365 personal contacts: list and read a user's contacts and create a "
+            "new contact."
+        ),
+        required_permissions=(
+            "Contacts.Read",
+            "Contacts.ReadWrite",
+        ),
+        tags=("contacts", "outlook", "people", "address book", "m365"),
+    )
+
+    def __init__(self, handlers: Any) -> None:
+        self._handlers = handlers
+
+    def tools(self) -> list[ToolDefinition]:
+        return [
+            _tool(
+                "list_contacts",
+                "List a user's contacts.",
+                ListContactsArgs,
+                self._handlers.list_contacts,
+                domain=self.metadata.name,
+                tags=("contacts", "people", "read"),
+            ),
+            _tool(
+                "get_contact",
+                "Get a single contact by ID.",
+                GetContactArgs,
+                self._handlers.get_contact,
+                domain=self.metadata.name,
+                tags=("contacts", "contact", "read"),
+            ),
+            _tool(
+                "create_contact",
+                "Create a contact for a user.",
+                CreateContactArgs,
+                self._handlers.create_contact,
+                read_only=False,
+                requires_confirmation=True,
+                domain=self.metadata.name,
+                safety="mutation",
+                tags=("contacts", "contact", "create", "mutation"),
+            ),
+        ]
+
+
+class PlannerDomain(GraphDomain):
+    metadata = DomainMetadata(
+        name="planner",
+        display_name="Planner",
+        description=(
+            "Microsoft Planner: list a group's plans, inspect a plan and its tasks, and create "
+            "a new Planner task."
+        ),
+        required_permissions=(
+            "Tasks.Read.All",
+            "Tasks.ReadWrite.All",
+            "Group.Read.All",
+        ),
+        tags=("planner", "plans", "tasks", "buckets", "m365"),
+    )
+
+    def __init__(self, handlers: Any) -> None:
+        self._handlers = handlers
+
+    def tools(self) -> list[ToolDefinition]:
+        return [
+            _tool(
+                "list_group_plans",
+                "List the Planner plans owned by a group.",
+                ListGroupPlansArgs,
+                self._handlers.list_group_plans,
+                domain=self.metadata.name,
+                tags=("planner", "plans", "read"),
+            ),
+            _tool(
+                "get_plan",
+                "Get a Planner plan by ID.",
+                GetPlanArgs,
+                self._handlers.get_plan,
+                domain=self.metadata.name,
+                tags=("planner", "plan", "read"),
+            ),
+            _tool(
+                "list_plan_tasks",
+                "List the tasks in a Planner plan.",
+                ListPlanTasksArgs,
+                self._handlers.list_plan_tasks,
+                domain=self.metadata.name,
+                tags=("planner", "tasks", "read"),
+            ),
+            _tool(
+                "create_planner_task",
+                "Create a Planner task.",
+                CreatePlannerTaskArgs,
+                self._handlers.create_planner_task,
+                read_only=False,
+                requires_confirmation=True,
+                domain=self.metadata.name,
+                safety="mutation",
+                tags=("planner", "task", "create", "mutation"),
+            ),
+        ]
+
+
+class TodoDomain(GraphDomain):
+    metadata = DomainMetadata(
+        name="todo",
+        display_name="To Do",
+        description=(
+            "Microsoft To Do: list a user's task lists and the tasks in a list, and create a "
+            "new task."
+        ),
+        required_permissions=(
+            "Tasks.Read",
+            "Tasks.ReadWrite",
+        ),
+        tags=("todo", "to do", "tasks", "lists", "m365"),
+    )
+
+    def __init__(self, handlers: Any) -> None:
+        self._handlers = handlers
+
+    def tools(self) -> list[ToolDefinition]:
+        return [
+            _tool(
+                "list_todo_lists",
+                "List a user's To Do lists.",
+                ListTodoListsArgs,
+                self._handlers.list_todo_lists,
+                domain=self.metadata.name,
+                tags=("todo", "lists", "read"),
+            ),
+            _tool(
+                "list_todo_tasks",
+                "List the tasks in a To Do list.",
+                ListTodoTasksArgs,
+                self._handlers.list_todo_tasks,
+                domain=self.metadata.name,
+                tags=("todo", "tasks", "read"),
+            ),
+            _tool(
+                "create_todo_task",
+                "Create a To Do task.",
+                CreateTodoTaskArgs,
+                self._handlers.create_todo_task,
+                read_only=False,
+                requires_confirmation=True,
+                domain=self.metadata.name,
+                safety="mutation",
+                tags=("todo", "task", "create", "mutation"),
+            ),
+        ]
+
+
+class UsageReportsDomain(GraphDomain):
+    metadata = DomainMetadata(
+        name="usage_reports",
+        display_name="Usage Reports",
+        description=(
+            "Microsoft 365 usage reports: Teams user activity, email activity, and Office 365 "
+            "active users over a selectable reporting period. Read-only."
+        ),
+        required_permissions=("Reports.Read.All",),
+        tags=("reports", "usage", "activity", "analytics", "m365"),
+    )
+
+    def __init__(self, handlers: Any) -> None:
+        self._handlers = handlers
+
+    def tools(self) -> list[ToolDefinition]:
+        return [
+            _tool(
+                "get_teams_user_activity_counts",
+                "Get Microsoft Teams user activity counts for a reporting period.",
+                ReportPeriodArgs,
+                self._handlers.get_teams_user_activity_counts,
+                domain=self.metadata.name,
+                tags=("reports", "teams", "activity", "read"),
+            ),
+            _tool(
+                "get_email_activity_counts",
+                "Get email activity counts for a reporting period.",
+                ReportPeriodArgs,
+                self._handlers.get_email_activity_counts,
+                domain=self.metadata.name,
+                tags=("reports", "email", "activity", "read"),
+            ),
+            _tool(
+                "get_office365_active_users",
+                "Get Office 365 active user detail for a reporting period.",
+                ReportPeriodArgs,
+                self._handlers.get_office365_active_users,
+                domain=self.metadata.name,
+                tags=("reports", "office365", "active users", "read"),
+            ),
+        ]
+
+
+class ServiceHealthDomain(GraphDomain):
+    metadata = DomainMetadata(
+        name="service_health",
+        display_name="Service Health",
+        description=(
+            "Microsoft 365 service health: service health overviews, service issues, and "
+            "service announcement messages. Read-only."
+        ),
+        required_permissions=(
+            "ServiceHealth.Read.All",
+            "ServiceMessage.Read.All",
+        ),
+        tags=("service health", "health", "issues", "announcements", "m365"),
+    )
+
+    def __init__(self, handlers: Any) -> None:
+        self._handlers = handlers
+
+    def tools(self) -> list[ToolDefinition]:
+        return [
+            _tool(
+                "list_service_health_overviews",
+                "List Microsoft 365 service health overviews.",
+                PaginationArgs,
+                self._handlers.list_service_health_overviews,
+                domain=self.metadata.name,
+                tags=("service health", "health", "overview", "read"),
+            ),
+            _tool(
+                "list_service_health_issues",
+                "List Microsoft 365 service health issues.",
+                PaginationArgs,
+                self._handlers.list_service_health_issues,
+                domain=self.metadata.name,
+                tags=("service health", "issues", "incidents", "read"),
+            ),
+            _tool(
+                "list_service_messages",
+                "List Microsoft 365 service announcement messages.",
+                PaginationArgs,
+                self._handlers.list_service_messages,
+                domain=self.metadata.name,
+                tags=("service health", "messages", "announcements", "read"),
+            ),
+        ]
+
+
 class GraphToolFactory:
     """Builds the tool registry and implements every Graph tool handler."""
 
@@ -1385,6 +1947,14 @@ class GraphToolFactory:
             TeamsDomain(self),
             FilesDomain(self),
             DeviceManagementDomain(self),
+            ChatsDomain(self),
+            SharePointSitesDomain(self),
+            OneNoteDomain(self),
+            ContactsDomain(self),
+            PlannerDomain(self),
+            TodoDomain(self),
+            UsageReportsDomain(self),
+            ServiceHealthDomain(self),
             CatalogOperationDomain(self),
         ]:
             registry.register_domain(domain)
@@ -1920,6 +2490,164 @@ class GraphToolFactory:
     async def sync_managed_device(self, args: SyncManagedDeviceArgs) -> Any:
         return await self._client.request(
             "POST", f"/deviceManagement/managedDevices/{args.device_id}/syncDevice"
+        )
+
+    async def list_user_chats(self, args: ListUserChatsArgs) -> Any:
+        return await self._client.request_collection(
+            f"/users/{args.user_id}/chats",
+            params=_pagination_params(args),
+            all_pages=args.all_pages,
+            max_pages=args.max_pages,
+        )
+
+    async def list_chat_messages(self, args: ListChatMessagesArgs) -> Any:
+        return await self._client.request_collection(
+            f"/chats/{args.chat_id}/messages",
+            params=_pagination_params(args),
+            all_pages=args.all_pages,
+            max_pages=args.max_pages,
+        )
+
+    async def send_chat_message(self, args: SendChatMessageArgs) -> Any:
+        return await self._client.request(
+            "POST",
+            f"/chats/{args.chat_id}/messages",
+            json_data={"body": {"content": args.content}},
+        )
+
+    async def list_sites(self, args: ListSitesArgs) -> Any:
+        return await self._client.request_collection(
+            "/sites",
+            params=_pagination_params(args),
+            all_pages=args.all_pages,
+            max_pages=args.max_pages,
+        )
+
+    async def get_site(self, args: GetSiteArgs) -> Any:
+        return await self._client.request("GET", f"/sites/{args.site_id}")
+
+    async def list_site_lists(self, args: ListSiteListsArgs) -> Any:
+        return await self._client.request_collection(f"/sites/{args.site_id}/lists")
+
+    async def list_list_items(self, args: ListListItemsArgs) -> Any:
+        return await self._client.request_collection(
+            f"/sites/{args.site_id}/lists/{args.list_id}/items"
+        )
+
+    async def create_list_item(self, args: CreateListItemArgs) -> Any:
+        return await self._client.request(
+            "POST",
+            f"/sites/{args.site_id}/lists/{args.list_id}/items",
+            json_data={"fields": args.fields},
+        )
+
+    async def list_notebooks(self, args: ListNotebooksArgs) -> Any:
+        return await self._client.request_collection(f"/users/{args.user_id}/onenote/notebooks")
+
+    async def list_notebook_sections(self, args: ListNotebookSectionsArgs) -> Any:
+        return await self._client.request_collection(
+            f"/users/{args.user_id}/onenote/notebooks/{args.notebook_id}/sections"
+        )
+
+    async def list_section_pages(self, args: ListSectionPagesArgs) -> Any:
+        return await self._client.request_collection(
+            f"/users/{args.user_id}/onenote/sections/{args.section_id}/pages"
+        )
+
+    async def list_contacts(self, args: ListContactsArgs) -> Any:
+        return await self._client.request_collection(
+            f"/users/{args.user_id}/contacts",
+            params=_pagination_params(args),
+            all_pages=args.all_pages,
+            max_pages=args.max_pages,
+        )
+
+    async def get_contact(self, args: GetContactArgs) -> Any:
+        return await self._client.request(
+            "GET", f"/users/{args.user_id}/contacts/{args.contact_id}"
+        )
+
+    async def create_contact(self, args: CreateContactArgs) -> Any:
+        body = {
+            "givenName": args.given_name,
+            "surname": args.surname,
+            "emailAddresses": [
+                {"address": args.email, "name": f"{args.given_name} {args.surname}"}
+            ],
+        }
+        return await self._client.request(
+            "POST", f"/users/{args.user_id}/contacts", json_data=body
+        )
+
+    async def list_group_plans(self, args: ListGroupPlansArgs) -> Any:
+        return await self._client.request_collection(f"/groups/{args.group_id}/planner/plans")
+
+    async def get_plan(self, args: GetPlanArgs) -> Any:
+        return await self._client.request("GET", f"/planner/plans/{args.plan_id}")
+
+    async def list_plan_tasks(self, args: ListPlanTasksArgs) -> Any:
+        return await self._client.request_collection(f"/planner/plans/{args.plan_id}/tasks")
+
+    async def create_planner_task(self, args: CreatePlannerTaskArgs) -> Any:
+        body: dict[str, Any] = {"planId": args.plan_id, "title": args.title}
+        if args.bucket_id:
+            body["bucketId"] = args.bucket_id
+        return await self._client.request("POST", "/planner/tasks", json_data=body)
+
+    async def list_todo_lists(self, args: ListTodoListsArgs) -> Any:
+        return await self._client.request_collection(f"/users/{args.user_id}/todo/lists")
+
+    async def list_todo_tasks(self, args: ListTodoTasksArgs) -> Any:
+        return await self._client.request_collection(
+            f"/users/{args.user_id}/todo/lists/{args.list_id}/tasks"
+        )
+
+    async def create_todo_task(self, args: CreateTodoTaskArgs) -> Any:
+        return await self._client.request(
+            "POST",
+            f"/users/{args.user_id}/todo/lists/{args.list_id}/tasks",
+            json_data={"title": args.title},
+        )
+
+    async def get_teams_user_activity_counts(self, args: ReportPeriodArgs) -> Any:
+        # Real Graph returns CSV for report functions; the mock returns a JSON
+        # placeholder, an accepted fidelity tradeoff for this JSON-only client.
+        return await self._client.request(
+            "GET", f"/reports/getTeamsUserActivityCounts(period='{args.period}')"
+        )
+
+    async def get_email_activity_counts(self, args: ReportPeriodArgs) -> Any:
+        return await self._client.request(
+            "GET", f"/reports/getEmailActivityCounts(period='{args.period}')"
+        )
+
+    async def get_office365_active_users(self, args: ReportPeriodArgs) -> Any:
+        return await self._client.request(
+            "GET", f"/reports/getOffice365ActiveUserDetail(period='{args.period}')"
+        )
+
+    async def list_service_health_overviews(self, args: PaginationArgs) -> Any:
+        return await self._client.request_collection(
+            "/admin/serviceAnnouncement/healthOverviews",
+            params=_pagination_params(args),
+            all_pages=args.all_pages,
+            max_pages=args.max_pages,
+        )
+
+    async def list_service_health_issues(self, args: PaginationArgs) -> Any:
+        return await self._client.request_collection(
+            "/admin/serviceAnnouncement/issues",
+            params=_pagination_params(args),
+            all_pages=args.all_pages,
+            max_pages=args.max_pages,
+        )
+
+    async def list_service_messages(self, args: PaginationArgs) -> Any:
+        return await self._client.request_collection(
+            "/admin/serviceAnnouncement/messages",
+            params=_pagination_params(args),
+            all_pages=args.all_pages,
+            max_pages=args.max_pages,
         )
 
     async def graph_operation(self, args: GenericGraphOperationArgs) -> Any:
