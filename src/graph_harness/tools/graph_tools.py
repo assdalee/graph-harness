@@ -576,6 +576,111 @@ class ReportPeriodArgs(BaseModel):
     period: ReportPeriod = "D7"
 
 
+# --- Tier-2 security, compliance, and engagement ---------------------------
+
+
+class EmptyArgs(BaseModel):
+    """Input for a tool that takes no parameters."""
+
+
+class GetEdiscoveryCaseArgs(BaseModel):
+    """Input for fetching a single eDiscovery case."""
+
+    case_id: str = Field(description="eDiscovery case ID.")
+
+
+class ListEdiscoveryCustodiansArgs(BaseModel):
+    """Input for listing the custodians on an eDiscovery case."""
+
+    case_id: str = Field(description="eDiscovery case ID.")
+
+
+class CloseEdiscoveryCaseArgs(ConfirmableArgs):
+    """Confirmable input for closing an eDiscovery case."""
+
+    case_id: str = Field(description="eDiscovery case ID to close.")
+
+
+class GetSensitivityLabelArgs(BaseModel):
+    """Input for fetching a single sensitivity label."""
+
+    label_id: str = Field(description="Sensitivity label ID.")
+
+
+class GetThreatIntelHostArgs(BaseModel):
+    """Input for fetching a threat intelligence host."""
+
+    host_id: str = Field(description="Host identifier (hostname or IP).")
+
+
+class GetVulnerabilityArgs(BaseModel):
+    """Input for fetching a threat intelligence vulnerability."""
+
+    vulnerability_id: str = Field(description="Vulnerability ID (e.g. a CVE identifier).")
+
+
+class GetOnlineMeetingArgs(BaseModel):
+    """Input for fetching a user's online meeting."""
+
+    user_id: str = Field(description="User object ID or userPrincipalName.")
+    meeting_id: str = Field(description="Online meeting ID.")
+
+
+class ListAttendanceReportsArgs(BaseModel):
+    """Input for listing an online meeting's attendance reports."""
+
+    user_id: str = Field(description="User object ID or userPrincipalName.")
+    meeting_id: str = Field(description="Online meeting ID.")
+
+
+class CreateOnlineMeetingArgs(ConfirmableArgs):
+    """Confirmable input for creating an online meeting for a user."""
+
+    user_id: str = Field(description="User object ID or userPrincipalName.")
+    subject: str = Field(description="Meeting subject.")
+    start_date_time: str = Field(description="Meeting start time (ISO 8601).")
+    end_date_time: str = Field(description="Meeting end time (ISO 8601).")
+
+
+class GetBookingBusinessArgs(BaseModel):
+    """Input for fetching a single Bookings business."""
+
+    business_id: str = Field(description="Bookings business ID.")
+
+
+class ListBookingServicesArgs(BaseModel):
+    """Input for listing the services offered by a Bookings business."""
+
+    business_id: str = Field(description="Bookings business ID.")
+
+
+class ListBookingAppointmentsArgs(BaseModel):
+    """Input for listing the appointments of a Bookings business."""
+
+    business_id: str = Field(description="Bookings business ID.")
+
+
+class CreateBookingAppointmentArgs(ConfirmableArgs):
+    """Confirmable input for creating a Bookings appointment."""
+
+    business_id: str = Field(description="Bookings business ID.")
+    service_id: str = Field(description="Bookings service ID being booked.")
+    customer_name: str = Field(description="Customer display name.")
+    start_date_time: str = Field(description="Appointment start time (ISO 8601).")
+    end_date_time: str = Field(description="Appointment end time (ISO 8601).")
+
+
+class SearchQueryArgs(BaseModel):
+    """Input for a Microsoft Search query across one or more entity types."""
+
+    query: str = Field(description="Search query string (KQL or free text).")
+    entity_types: list[str] = Field(
+        default_factory=lambda: ["message"],
+        description="Entity types to search (e.g. message, event, driveItem, site, chatMessage).",
+    )
+    size: int = Field(default=25, ge=1, le=500, description="Maximum hits to return.")
+
+
 class IdentityAccessDomain(GraphDomain):
     """Graph domain exposing user, group, app, and OAuth identity tools."""
 
@@ -1922,6 +2027,345 @@ class ServiceHealthDomain(GraphDomain):
         ]
 
 
+class SecureScoreDomain(GraphDomain):
+    metadata = DomainMetadata(
+        name="secure_score",
+        display_name="Secure Score",
+        description=(
+            "Microsoft Secure Score: list secure score snapshots and the control profiles that "
+            "describe each improvement action. Read-only."
+        ),
+        required_permissions=("SecurityEvents.Read.All",),
+        tags=("secure score", "security", "posture", "controls", "compliance"),
+    )
+
+    def __init__(self, handlers: Any) -> None:
+        self._handlers = handlers
+
+    def tools(self) -> list[ToolDefinition]:
+        return [
+            _tool(
+                "list_secure_scores",
+                "List Microsoft Secure Score snapshots.",
+                PaginationArgs,
+                self._handlers.list_secure_scores,
+                domain=self.metadata.name,
+                tags=("secure score", "posture", "read"),
+            ),
+            _tool(
+                "list_secure_score_control_profiles",
+                "List Secure Score control profiles (improvement actions).",
+                PaginationArgs,
+                self._handlers.list_secure_score_control_profiles,
+                domain=self.metadata.name,
+                tags=("secure score", "controls", "read"),
+            ),
+        ]
+
+
+class EdiscoveryDomain(GraphDomain):
+    metadata = DomainMetadata(
+        name="ediscovery",
+        display_name="eDiscovery",
+        description=(
+            "Microsoft Purview eDiscovery: list and inspect eDiscovery cases, list a case's "
+            "custodians, and close a case."
+        ),
+        required_permissions=(
+            "eDiscovery.Read.All",
+            "eDiscovery.ReadWrite.All",
+        ),
+        tags=("ediscovery", "purview", "compliance", "legal", "cases"),
+    )
+
+    def __init__(self, handlers: Any) -> None:
+        self._handlers = handlers
+
+    def tools(self) -> list[ToolDefinition]:
+        return [
+            _tool(
+                "list_ediscovery_cases",
+                "List Microsoft Purview eDiscovery cases.",
+                PaginationArgs,
+                self._handlers.list_ediscovery_cases,
+                domain=self.metadata.name,
+                tags=("ediscovery", "cases", "read"),
+            ),
+            _tool(
+                "get_ediscovery_case",
+                "Get an eDiscovery case by ID.",
+                GetEdiscoveryCaseArgs,
+                self._handlers.get_ediscovery_case,
+                domain=self.metadata.name,
+                tags=("ediscovery", "case", "read"),
+            ),
+            _tool(
+                "list_ediscovery_custodians",
+                "List the custodians on an eDiscovery case.",
+                ListEdiscoveryCustodiansArgs,
+                self._handlers.list_ediscovery_custodians,
+                domain=self.metadata.name,
+                tags=("ediscovery", "custodians", "read"),
+            ),
+            _tool(
+                "close_ediscovery_case",
+                "Close an eDiscovery case.",
+                CloseEdiscoveryCaseArgs,
+                self._handlers.close_ediscovery_case,
+                read_only=False,
+                requires_confirmation=True,
+                domain=self.metadata.name,
+                safety="mutation",
+                tags=("ediscovery", "case", "close", "mutation"),
+            ),
+        ]
+
+
+class InformationProtectionDomain(GraphDomain):
+    metadata = DomainMetadata(
+        name="information_protection",
+        display_name="Information Protection",
+        description=(
+            "Microsoft Purview Information Protection: list and inspect sensitivity labels and "
+            "read label policy settings. Read-only."
+        ),
+        required_permissions=("InformationProtectionPolicy.Read.All",),
+        tags=("information protection", "sensitivity labels", "dlp", "purview", "compliance"),
+    )
+
+    def __init__(self, handlers: Any) -> None:
+        self._handlers = handlers
+
+    def tools(self) -> list[ToolDefinition]:
+        return [
+            _tool(
+                "list_sensitivity_labels",
+                "List Microsoft Purview sensitivity labels.",
+                PaginationArgs,
+                self._handlers.list_sensitivity_labels,
+                domain=self.metadata.name,
+                tags=("information protection", "labels", "read"),
+            ),
+            _tool(
+                "get_sensitivity_label",
+                "Get a sensitivity label by ID.",
+                GetSensitivityLabelArgs,
+                self._handlers.get_sensitivity_label,
+                domain=self.metadata.name,
+                tags=("information protection", "label", "read"),
+            ),
+            _tool(
+                "list_label_policy_settings",
+                "Read sensitivity label policy settings.",
+                EmptyArgs,
+                self._handlers.list_label_policy_settings,
+                domain=self.metadata.name,
+                tags=("information protection", "policy", "read"),
+            ),
+        ]
+
+
+class ThreatIntelligenceDomain(GraphDomain):
+    metadata = DomainMetadata(
+        name="threat_intelligence",
+        display_name="Threat Intelligence",
+        description=(
+            "Microsoft Defender Threat Intelligence: list intel articles and profiles and look up "
+            "hosts and vulnerabilities. Read-only."
+        ),
+        required_permissions=("ThreatIntelligence.Read.All",),
+        tags=("threat intelligence", "defender", "tip", "security", "iocs"),
+    )
+
+    def __init__(self, handlers: Any) -> None:
+        self._handlers = handlers
+
+    def tools(self) -> list[ToolDefinition]:
+        return [
+            _tool(
+                "list_threat_intelligence_articles",
+                "List Microsoft Defender Threat Intelligence articles.",
+                PaginationArgs,
+                self._handlers.list_threat_intelligence_articles,
+                domain=self.metadata.name,
+                tags=("threat intelligence", "articles", "read"),
+            ),
+            _tool(
+                "list_intel_profiles",
+                "List threat intelligence (threat actor) profiles.",
+                PaginationArgs,
+                self._handlers.list_intel_profiles,
+                domain=self.metadata.name,
+                tags=("threat intelligence", "profiles", "read"),
+            ),
+            _tool(
+                "get_threat_intelligence_host",
+                "Look up a host (hostname or IP) in threat intelligence.",
+                GetThreatIntelHostArgs,
+                self._handlers.get_threat_intelligence_host,
+                domain=self.metadata.name,
+                tags=("threat intelligence", "host", "read"),
+            ),
+            _tool(
+                "get_vulnerability",
+                "Look up a vulnerability (e.g. a CVE) in threat intelligence.",
+                GetVulnerabilityArgs,
+                self._handlers.get_vulnerability,
+                domain=self.metadata.name,
+                tags=("threat intelligence", "vulnerability", "cve", "read"),
+            ),
+        ]
+
+
+class OnlineMeetingsDomain(GraphDomain):
+    metadata = DomainMetadata(
+        name="online_meetings",
+        display_name="Online Meetings",
+        description=(
+            "Microsoft Teams online meetings: get a meeting, list its attendance reports, and "
+            "create a new online meeting."
+        ),
+        required_permissions=(
+            "OnlineMeetings.Read",
+            "OnlineMeetings.ReadWrite",
+            "OnlineMeetingArtifact.Read.All",
+        ),
+        tags=("online meetings", "teams", "meetings", "attendance", "m365"),
+    )
+
+    def __init__(self, handlers: Any) -> None:
+        self._handlers = handlers
+
+    def tools(self) -> list[ToolDefinition]:
+        return [
+            _tool(
+                "get_online_meeting",
+                "Get a user's online meeting by ID.",
+                GetOnlineMeetingArgs,
+                self._handlers.get_online_meeting,
+                domain=self.metadata.name,
+                tags=("online meetings", "meeting", "read"),
+            ),
+            _tool(
+                "list_meeting_attendance_reports",
+                "List an online meeting's attendance reports.",
+                ListAttendanceReportsArgs,
+                self._handlers.list_meeting_attendance_reports,
+                domain=self.metadata.name,
+                tags=("online meetings", "attendance", "read"),
+            ),
+            _tool(
+                "create_online_meeting",
+                "Create an online meeting for a user.",
+                CreateOnlineMeetingArgs,
+                self._handlers.create_online_meeting,
+                read_only=False,
+                requires_confirmation=True,
+                domain=self.metadata.name,
+                safety="mutation",
+                tags=("online meetings", "meeting", "create", "mutation"),
+            ),
+        ]
+
+
+class BookingsDomain(GraphDomain):
+    metadata = DomainMetadata(
+        name="bookings",
+        display_name="Bookings",
+        description=(
+            "Microsoft Bookings: list booking businesses, inspect a business and its services, "
+            "list appointments, and create a new appointment."
+        ),
+        required_permissions=(
+            "Bookings.Read.All",
+            "BookingsAppointment.ReadWrite.All",
+        ),
+        tags=("bookings", "appointments", "scheduling", "services", "m365"),
+    )
+
+    def __init__(self, handlers: Any) -> None:
+        self._handlers = handlers
+
+    def tools(self) -> list[ToolDefinition]:
+        return [
+            _tool(
+                "list_booking_businesses",
+                "List Microsoft Bookings businesses.",
+                PaginationArgs,
+                self._handlers.list_booking_businesses,
+                domain=self.metadata.name,
+                tags=("bookings", "businesses", "read"),
+            ),
+            _tool(
+                "get_booking_business",
+                "Get a Bookings business by ID.",
+                GetBookingBusinessArgs,
+                self._handlers.get_booking_business,
+                domain=self.metadata.name,
+                tags=("bookings", "business", "read"),
+            ),
+            _tool(
+                "list_booking_services",
+                "List the services offered by a Bookings business.",
+                ListBookingServicesArgs,
+                self._handlers.list_booking_services,
+                domain=self.metadata.name,
+                tags=("bookings", "services", "read"),
+            ),
+            _tool(
+                "list_booking_appointments",
+                "List the appointments of a Bookings business.",
+                ListBookingAppointmentsArgs,
+                self._handlers.list_booking_appointments,
+                domain=self.metadata.name,
+                tags=("bookings", "appointments", "read"),
+            ),
+            _tool(
+                "create_booking_appointment",
+                "Create an appointment for a Bookings business.",
+                CreateBookingAppointmentArgs,
+                self._handlers.create_booking_appointment,
+                read_only=False,
+                requires_confirmation=True,
+                domain=self.metadata.name,
+                safety="mutation",
+                tags=("bookings", "appointment", "create", "mutation"),
+            ),
+        ]
+
+
+class SearchDomain(GraphDomain):
+    metadata = DomainMetadata(
+        name="search",
+        display_name="Search",
+        description=(
+            "Microsoft Search API: run a query across entity types such as messages, events, "
+            "drive items, sites, and chat messages. Read-only."
+        ),
+        required_permissions=(
+            "Mail.Read",
+            "Files.Read.All",
+            "Sites.Read.All",
+        ),
+        tags=("search", "query", "kql", "discovery", "m365"),
+    )
+
+    def __init__(self, handlers: Any) -> None:
+        self._handlers = handlers
+
+    def tools(self) -> list[ToolDefinition]:
+        return [
+            _tool(
+                "search_query",
+                "Run a Microsoft Search query across one or more entity types.",
+                SearchQueryArgs,
+                self._handlers.search_query,
+                domain=self.metadata.name,
+                tags=("search", "query", "read"),
+            ),
+        ]
+
+
 class GraphToolFactory:
     """Builds the tool registry and implements every Graph tool handler."""
 
@@ -1955,6 +2399,13 @@ class GraphToolFactory:
             TodoDomain(self),
             UsageReportsDomain(self),
             ServiceHealthDomain(self),
+            SecureScoreDomain(self),
+            EdiscoveryDomain(self),
+            InformationProtectionDomain(self),
+            ThreatIntelligenceDomain(self),
+            OnlineMeetingsDomain(self),
+            BookingsDomain(self),
+            SearchDomain(self),
             CatalogOperationDomain(self),
         ]:
             registry.register_domain(domain)
@@ -2649,6 +3100,157 @@ class GraphToolFactory:
             all_pages=args.all_pages,
             max_pages=args.max_pages,
         )
+
+    async def list_secure_scores(self, args: PaginationArgs) -> Any:
+        return await self._client.request_collection(
+            "/security/secureScores",
+            params=_pagination_params(args),
+            all_pages=args.all_pages,
+            max_pages=args.max_pages,
+        )
+
+    async def list_secure_score_control_profiles(self, args: PaginationArgs) -> Any:
+        return await self._client.request_collection(
+            "/security/secureScoreControlProfiles",
+            params=_pagination_params(args),
+            all_pages=args.all_pages,
+            max_pages=args.max_pages,
+        )
+
+    async def list_ediscovery_cases(self, args: PaginationArgs) -> Any:
+        return await self._client.request_collection(
+            "/security/cases/ediscoveryCases",
+            params=_pagination_params(args),
+            all_pages=args.all_pages,
+            max_pages=args.max_pages,
+        )
+
+    async def get_ediscovery_case(self, args: GetEdiscoveryCaseArgs) -> Any:
+        return await self._client.request(
+            "GET", f"/security/cases/ediscoveryCases/{args.case_id}"
+        )
+
+    async def list_ediscovery_custodians(self, args: ListEdiscoveryCustodiansArgs) -> Any:
+        return await self._client.request_collection(
+            f"/security/cases/ediscoveryCases/{args.case_id}/custodians"
+        )
+
+    async def close_ediscovery_case(self, args: CloseEdiscoveryCaseArgs) -> Any:
+        return await self._client.request(
+            "POST", f"/security/cases/ediscoveryCases/{args.case_id}/close"
+        )
+
+    async def list_sensitivity_labels(self, args: PaginationArgs) -> Any:
+        return await self._client.request_collection(
+            "/security/informationProtection/sensitivityLabels",
+            params=_pagination_params(args),
+            all_pages=args.all_pages,
+            max_pages=args.max_pages,
+        )
+
+    async def get_sensitivity_label(self, args: GetSensitivityLabelArgs) -> Any:
+        return await self._client.request(
+            "GET", f"/security/informationProtection/sensitivityLabels/{args.label_id}"
+        )
+
+    async def list_label_policy_settings(self, args: EmptyArgs) -> Any:
+        return await self._client.request_collection(
+            "/security/informationProtection/labelPolicySettings"
+        )
+
+    async def list_threat_intelligence_articles(self, args: PaginationArgs) -> Any:
+        return await self._client.request_collection(
+            "/security/threatIntelligence/articles",
+            params=_pagination_params(args),
+            all_pages=args.all_pages,
+            max_pages=args.max_pages,
+        )
+
+    async def list_intel_profiles(self, args: PaginationArgs) -> Any:
+        return await self._client.request_collection(
+            "/security/threatIntelligence/intelProfiles",
+            params=_pagination_params(args),
+            all_pages=args.all_pages,
+            max_pages=args.max_pages,
+        )
+
+    async def get_threat_intelligence_host(self, args: GetThreatIntelHostArgs) -> Any:
+        return await self._client.request(
+            "GET", f"/security/threatIntelligence/hosts/{args.host_id}"
+        )
+
+    async def get_vulnerability(self, args: GetVulnerabilityArgs) -> Any:
+        return await self._client.request(
+            "GET", f"/security/threatIntelligence/vulnerabilities/{args.vulnerability_id}"
+        )
+
+    async def get_online_meeting(self, args: GetOnlineMeetingArgs) -> Any:
+        return await self._client.request(
+            "GET", f"/users/{args.user_id}/onlineMeetings/{args.meeting_id}"
+        )
+
+    async def list_meeting_attendance_reports(self, args: ListAttendanceReportsArgs) -> Any:
+        return await self._client.request_collection(
+            f"/users/{args.user_id}/onlineMeetings/{args.meeting_id}/attendanceReports"
+        )
+
+    async def create_online_meeting(self, args: CreateOnlineMeetingArgs) -> Any:
+        body = {
+            "subject": args.subject,
+            "startDateTime": args.start_date_time,
+            "endDateTime": args.end_date_time,
+        }
+        return await self._client.request(
+            "POST", f"/users/{args.user_id}/onlineMeetings", json_data=body
+        )
+
+    async def list_booking_businesses(self, args: PaginationArgs) -> Any:
+        return await self._client.request_collection(
+            "/solutions/bookingBusinesses",
+            params=_pagination_params(args),
+            all_pages=args.all_pages,
+            max_pages=args.max_pages,
+        )
+
+    async def get_booking_business(self, args: GetBookingBusinessArgs) -> Any:
+        return await self._client.request(
+            "GET", f"/solutions/bookingBusinesses/{args.business_id}"
+        )
+
+    async def list_booking_services(self, args: ListBookingServicesArgs) -> Any:
+        return await self._client.request_collection(
+            f"/solutions/bookingBusinesses/{args.business_id}/services"
+        )
+
+    async def list_booking_appointments(self, args: ListBookingAppointmentsArgs) -> Any:
+        return await self._client.request_collection(
+            f"/solutions/bookingBusinesses/{args.business_id}/appointments"
+        )
+
+    async def create_booking_appointment(self, args: CreateBookingAppointmentArgs) -> Any:
+        body = {
+            "serviceId": args.service_id,
+            "customerName": args.customer_name,
+            "startDateTime": {"dateTime": args.start_date_time, "timeZone": "UTC"},
+            "endDateTime": {"dateTime": args.end_date_time, "timeZone": "UTC"},
+        }
+        return await self._client.request(
+            "POST",
+            f"/solutions/bookingBusinesses/{args.business_id}/appointments",
+            json_data=body,
+        )
+
+    async def search_query(self, args: SearchQueryArgs) -> Any:
+        body = {
+            "requests": [
+                {
+                    "entityTypes": args.entity_types,
+                    "query": {"queryString": args.query},
+                    "size": args.size,
+                }
+            ]
+        }
+        return await self._client.request("POST", "/search/query", json_data=body)
 
     async def graph_operation(self, args: GenericGraphOperationArgs) -> Any:
         """Execute a cataloged Graph operation, enforcing confirmation and path-param validation."""

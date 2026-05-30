@@ -272,6 +272,54 @@ class MockGraphClient:
         self.service_messages = [
             {"id": "MC123", "title": "Upcoming change to Teams", "category": "planForChange"},
         ]
+        self.secure_scores = [
+            {"id": "score-2026-05-13", "currentScore": 412, "maxScore": 600},
+        ]
+        self.secure_score_control_profiles = [
+            {"id": "MFARegistrationV2", "title": "Require MFA registration", "maxScore": 30},
+        ]
+        self.ediscovery_cases = [
+            {"id": "case-1", "displayName": "Acme litigation", "status": "active"},
+        ]
+        self.ediscovery_custodians = [
+            {"id": "cust-1", "email": "sarah@example.com", "status": "active"},
+        ]
+        self.sensitivity_labels = [
+            {"id": "label-conf", "name": "Confidential", "isActive": True},
+        ]
+        self.label_policy_settings = [
+            {"id": "settings", "moreInfoUrl": "https://contoso.example/labels"},
+        ]
+        self.threat_intel_articles = [
+            {"id": "ti-article-1", "title": "Emerging phishing campaign"},
+        ]
+        self.intel_profiles = [
+            {"id": "actor-1", "title": "Storm-0123", "kind": "actor"},
+        ]
+        self.threat_intel_hosts = [
+            {"id": "contoso.example", "firstSeenDateTime": "2026-04-01T00:00:00Z"},
+        ]
+        self.vulnerabilities = [
+            {"id": "CVE-2026-0001", "severity": "high"},
+        ]
+        self.online_meetings = [
+            {"id": "meeting-1", "subject": "Customer sync", "joinWebUrl": "https://teams.example"},
+        ]
+        self.meeting_attendance_reports = [
+            {"id": "report-1", "totalParticipantCount": 5},
+        ]
+        self.booking_businesses = [
+            {"id": "booking-contoso", "displayName": "Contoso Clinic"},
+        ]
+        self.booking_services = [
+            {"id": "svc-checkup", "displayName": "Checkup", "defaultDuration": "PT30M"},
+        ]
+        self.booking_appointments = [
+            {"id": "appt-1", "serviceId": "svc-checkup", "customerName": "Grace Hopper"},
+        ]
+        self.search_hits = [
+            {"hitId": "msg-1", "rank": 1, "summary": "Q2 planning"},
+        ]
 
     async def request(
         self,
@@ -377,6 +425,12 @@ class MockGraphClient:
                     return {"value": self._top(self.todo_lists, params)}
                 if rest.startswith("todo/lists/") and rest.endswith("/tasks"):
                     return {"value": self._top(self.todo_tasks, params)}
+                if rest.startswith("onlineMeetings/") and rest.endswith("/attendanceReports"):
+                    return {"value": self._top(self.meeting_attendance_reports, params)}
+                if rest.startswith("onlineMeetings/"):
+                    return self._get_by_identifier(
+                        self.online_meetings, rest.removeprefix("onlineMeetings/")
+                    )
         if method == "GET" and endpoint.startswith("/teams/"):
             tail = endpoint.removeprefix("/teams/")
             if tail.endswith("/channels"):
@@ -408,6 +462,54 @@ class MockGraphClient:
             return {"value": self._top(self.service_health_issues, params)}
         if method == "GET" and endpoint == "/admin/serviceAnnouncement/messages":
             return {"value": self._top(self.service_messages, params)}
+
+        if method == "GET" and endpoint == "/security/secureScores":
+            return {"value": self._top(self.secure_scores, params)}
+        if method == "GET" and endpoint == "/security/secureScoreControlProfiles":
+            return {"value": self._top(self.secure_score_control_profiles, params)}
+        if method == "GET" and endpoint == "/security/cases/ediscoveryCases":
+            return {"value": self._top(self.ediscovery_cases, params)}
+        if method == "GET" and endpoint.startswith("/security/cases/ediscoveryCases/"):
+            tail = endpoint.removeprefix("/security/cases/ediscoveryCases/")
+            if tail.endswith("/custodians"):
+                return {"value": self._top(self.ediscovery_custodians, params)}
+            return self._get_by_identifier(self.ediscovery_cases, tail)
+        if method == "GET" and endpoint == "/security/informationProtection/sensitivityLabels":
+            return {"value": self._top(self.sensitivity_labels, params)}
+        if method == "GET" and endpoint.startswith(
+            "/security/informationProtection/sensitivityLabels/"
+        ):
+            return self._get_by_identifier(
+                self.sensitivity_labels,
+                endpoint.removeprefix("/security/informationProtection/sensitivityLabels/"),
+            )
+        if method == "GET" and endpoint == "/security/informationProtection/labelPolicySettings":
+            return {"value": self._top(self.label_policy_settings, params)}
+        if method == "GET" and endpoint == "/security/threatIntelligence/articles":
+            return {"value": self._top(self.threat_intel_articles, params)}
+        if method == "GET" and endpoint == "/security/threatIntelligence/intelProfiles":
+            return {"value": self._top(self.intel_profiles, params)}
+        if method == "GET" and endpoint.startswith("/security/threatIntelligence/hosts/"):
+            return self._get_by_identifier(
+                self.threat_intel_hosts,
+                endpoint.removeprefix("/security/threatIntelligence/hosts/"),
+            )
+        if method == "GET" and endpoint.startswith("/security/threatIntelligence/vulnerabilities/"):
+            return self._get_by_identifier(
+                self.vulnerabilities,
+                endpoint.removeprefix("/security/threatIntelligence/vulnerabilities/"),
+            )
+        if method == "GET" and endpoint == "/solutions/bookingBusinesses":
+            return {"value": self._top(self.booking_businesses, params)}
+        if method == "GET" and endpoint.startswith("/solutions/bookingBusinesses/"):
+            tail = endpoint.removeprefix("/solutions/bookingBusinesses/")
+            if tail.endswith("/services"):
+                return {"value": self._top(self.booking_services, params)}
+            if tail.endswith("/appointments"):
+                return {"value": self._top(self.booking_appointments, params)}
+            return self._get_by_identifier(self.booking_businesses, tail)
+        if method == "POST" and endpoint == "/search/query":
+            return {"value": [{"hitsContainers": [{"hits": self.search_hits, "total": 1}]}]}
 
         if method == "GET" and endpoint == "/users":
             result = self._filter_entities(self.users, params)
