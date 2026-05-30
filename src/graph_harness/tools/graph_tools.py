@@ -815,6 +815,401 @@ class DeleteSubscriptionArgs(ConfirmableArgs):
     subscription_id: str = Field(description="Subscription ID to delete.")
 
 
+# --- Tier-4 write completeness ---------------------------------------------
+
+
+class CreateUserArgs(ConfirmableArgs):
+    """Confirmable input for creating a new user."""
+
+    user_principal_name: str = Field(description="The new user's userPrincipalName.")
+    display_name: str = Field(description="Display name.")
+    mail_nickname: str = Field(description="Mail nickname (mailbox prefix).")
+    password: str = Field(description="Initial password for the new user.")
+    account_enabled: bool = Field(default=True, description="Whether the account is enabled.")
+
+
+class CreateGroupArgs(ConfirmableArgs):
+    """Confirmable input for creating a new group."""
+
+    display_name: str = Field(description="Group display name.")
+    mail_nickname: str = Field(description="Group mail nickname.")
+    mail_enabled: bool = Field(default=False, description="Whether the group is mail-enabled.")
+    security_enabled: bool = Field(
+        default=True, description="Whether the group is a security group."
+    )
+    description: str | None = Field(default=None, description="Optional group description.")
+
+
+class UpdateGroupArgs(ConfirmableArgs):
+    """Confirmable input for updating a group's mutable properties."""
+
+    group_id: str = Field(description="Group ID to update.")
+    display_name: str | None = Field(default=None, description="New display name.")
+    description: str | None = Field(default=None, description="New description.")
+
+
+class DeleteGroupArgs(ConfirmableArgs):
+    """Confirmable input for deleting a group (destructive)."""
+
+    group_id: str = Field(description="Group ID to delete.")
+
+
+class GroupOwnerArgs(ConfirmableArgs):
+    """Confirmable input for adding or removing a group owner."""
+
+    group_id: str = Field(description="Group ID.")
+    owner_id: str = Field(description="Directory object ID of the owner.")
+
+
+class SetServicePrincipalEnabledArgs(ConfirmableArgs):
+    """Confirmable input for enabling or disabling a service principal."""
+
+    service_principal_id: str = Field(description="Service principal object ID.")
+    account_enabled: bool = Field(description="New accountEnabled value.")
+
+
+class AddApplicationPasswordArgs(ConfirmableArgs):
+    """Confirmable input for adding a client secret (password) to an application."""
+
+    application_id: str = Field(description="Application object ID.")
+    display_name: str = Field(description="Friendly name for the new secret.")
+
+
+class RemoveApplicationPasswordArgs(ConfirmableArgs):
+    """Confirmable input for removing a client secret from an application."""
+
+    application_id: str = Field(description="Application object ID.")
+    key_id: str = Field(description="Key identifier of the password credential to remove.")
+
+
+class UploadFileArgs(ConfirmableArgs):
+    """Confirmable input for uploading a small file to a drive."""
+
+    drive_id: str = Field(description="Drive ID to upload into.")
+    parent_path: str = Field(
+        default="root",
+        description="Parent folder path or 'root'. Relative paths are joined under root.",
+    )
+    file_name: str = Field(description="File name to create or overwrite.")
+    content: str = Field(description="UTF-8 text content for the upload (small-file path).")
+
+
+class CreateFolderArgs(ConfirmableArgs):
+    """Confirmable input for creating a folder in a drive."""
+
+    drive_id: str = Field(description="Drive ID.")
+    parent_id: str = Field(default="root", description="Parent folder ID, or 'root'.")
+    folder_name: str = Field(description="New folder name.")
+
+
+class DeleteDriveItemArgs(ConfirmableArgs):
+    """Confirmable input for deleting a drive item (destructive)."""
+
+    drive_id: str = Field(description="Drive ID.")
+    item_id: str = Field(description="Drive item ID to delete.")
+
+
+class CopyDriveItemArgs(ConfirmableArgs):
+    """Confirmable input for copying a drive item."""
+
+    drive_id: str = Field(description="Source drive ID.")
+    item_id: str = Field(description="Source drive item ID.")
+    new_name: str | None = Field(default=None, description="Optional new name for the copy.")
+    target_parent_id: str | None = Field(
+        default=None, description="Optional target parent folder ID."
+    )
+
+
+class MessageActionArgs(ConfirmableArgs):
+    """Confirmable input for an action targeting a specific mail message."""
+
+    user_id: str = Field(description="User object ID or userPrincipalName.")
+    message_id: str = Field(description="Mail message ID.")
+
+
+class ReplyMessageArgs(MessageActionArgs):
+    """Confirmable input for replying to a mail message."""
+
+    comment: str = Field(description="Reply comment to prepend to the original message.")
+    reply_all: bool = Field(default=False, description="Whether to reply to all recipients.")
+
+
+class ForwardMessageArgs(MessageActionArgs):
+    """Confirmable input for forwarding a mail message."""
+
+    to_recipients: list[str] = Field(description="Forward target email addresses.")
+    comment: str | None = Field(default=None, description="Optional comment to include.")
+
+
+class MoveMessageArgs(MessageActionArgs):
+    """Confirmable input for moving a mail message to another folder."""
+
+    destination_id: str = Field(description="Destination mail folder ID.")
+
+
+class UpdateMessageArgs(MessageActionArgs):
+    """Confirmable input for updating a mail message (e.g. mark read, set flag)."""
+
+    is_read: bool | None = Field(default=None, description="Set the message read state.")
+    flag_status: str | None = Field(
+        default=None,
+        description="Flag status (e.g. 'flagged', 'complete', 'notFlagged').",
+    )
+
+
+class CreateMailFolderArgs(ConfirmableArgs):
+    """Confirmable input for creating a mail folder."""
+
+    user_id: str = Field(description="User object ID or userPrincipalName.")
+    display_name: str = Field(description="Folder display name.")
+
+
+class UpdateEventArgs(ConfirmableArgs):
+    """Confirmable input for updating a calendar event."""
+
+    user_id: str = Field(description="User object ID or userPrincipalName.")
+    event_id: str = Field(description="Calendar event ID.")
+    subject: str | None = Field(default=None, description="New subject.")
+    body_content: str | None = Field(default=None, description="New body content.")
+
+
+EventResponse = Literal["accept", "tentativelyAccept", "decline"]
+
+
+class RespondToEventArgs(ConfirmableArgs):
+    """Confirmable input for responding to a calendar event invite."""
+
+    user_id: str = Field(description="User object ID or userPrincipalName.")
+    event_id: str = Field(description="Calendar event ID.")
+    response: EventResponse = Field(description="Response to send.")
+    comment: str | None = Field(default=None, description="Optional response comment.")
+    send_response: bool = Field(default=True, description="Whether to notify the organizer.")
+
+
+class CreateTeamArgs(ConfirmableArgs):
+    """Confirmable input for creating a Microsoft Team."""
+
+    display_name: str = Field(description="Team display name.")
+    description: str | None = Field(default=None, description="Optional team description.")
+    template: str = Field(
+        default="https://graph.microsoft.com/v1.0/teamsTemplates('standard')",
+        description="Team template binding URL.",
+    )
+
+
+class AddTeamMemberArgs(ConfirmableArgs):
+    """Confirmable input for adding a member to a team."""
+
+    team_id: str = Field(description="Team ID.")
+    user_id: str = Field(description="User object ID to add.")
+    roles: list[str] = Field(
+        default_factory=list, description="Optional roles (e.g. ['owner'])."
+    )
+
+
+class CreateChannelArgs(ConfirmableArgs):
+    """Confirmable input for creating a channel in a team."""
+
+    team_id: str = Field(description="Team ID.")
+    display_name: str = Field(description="Channel display name.")
+    membership_type: str = Field(
+        default="standard",
+        description="Channel membership type (standard, private, shared).",
+    )
+
+
+class ArchiveTeamArgs(ConfirmableArgs):
+    """Confirmable input for archiving a team."""
+
+    team_id: str = Field(description="Team ID to archive.")
+
+
+class CreateChatArgs(ConfirmableArgs):
+    """Confirmable input for creating a Teams chat."""
+
+    chat_type: str = Field(
+        default="oneOnOne", description="Chat type (oneOnOne or group)."
+    )
+    member_ids: list[str] = Field(description="User IDs to include as members.")
+    topic: str | None = Field(default=None, description="Optional chat topic (group chats).")
+
+
+class UpdatePlannerTaskArgs(ConfirmableArgs):
+    """Confirmable input for updating a Planner task (e.g. mark complete)."""
+
+    task_id: str = Field(description="Planner task ID.")
+    etag: str = Field(description="ETag from the task GET (used as If-Match).")
+    title: str | None = Field(default=None, description="New title.")
+    percent_complete: int | None = Field(
+        default=None, ge=0, le=100, description="Completion percent (100 = done)."
+    )
+
+
+class DeletePlannerTaskArgs(ConfirmableArgs):
+    """Confirmable input for deleting a Planner task (destructive)."""
+
+    task_id: str = Field(description="Planner task ID.")
+    etag: str = Field(description="ETag from the task GET (used as If-Match).")
+
+
+class UpdateTodoTaskArgs(ConfirmableArgs):
+    """Confirmable input for updating a To Do task."""
+
+    user_id: str = Field(description="User object ID or userPrincipalName.")
+    list_id: str = Field(description="To Do list ID.")
+    task_id: str = Field(description="To Do task ID.")
+    title: str | None = Field(default=None, description="New title.")
+    status: str | None = Field(
+        default=None,
+        description="New status (e.g. 'completed', 'inProgress').",
+    )
+
+
+class DeleteTodoTaskArgs(ConfirmableArgs):
+    """Confirmable input for deleting a To Do task (destructive)."""
+
+    user_id: str = Field(description="User object ID or userPrincipalName.")
+    list_id: str = Field(description="To Do list ID.")
+    task_id: str = Field(description="To Do task ID.")
+
+
+class UpdateContactArgs(ConfirmableArgs):
+    """Confirmable input for updating a contact."""
+
+    user_id: str = Field(description="User object ID or userPrincipalName.")
+    contact_id: str = Field(description="Contact ID.")
+    given_name: str | None = Field(default=None, description="New given name.")
+    surname: str | None = Field(default=None, description="New surname.")
+    email: str | None = Field(default=None, description="New email address.")
+
+
+class DeleteContactArgs(ConfirmableArgs):
+    """Confirmable input for deleting a contact (destructive)."""
+
+    user_id: str = Field(description="User object ID or userPrincipalName.")
+    contact_id: str = Field(description="Contact ID.")
+
+
+class UpdateListItemArgs(ConfirmableArgs):
+    """Confirmable input for updating a SharePoint list item."""
+
+    site_id: str = Field(description="SharePoint site ID.")
+    list_id: str = Field(description="SharePoint list ID.")
+    item_id: str = Field(description="List item ID.")
+    fields: dict[str, Any] = Field(description="Field name/value pairs to update.")
+
+
+class DeleteListItemArgs(ConfirmableArgs):
+    """Confirmable input for deleting a SharePoint list item (destructive)."""
+
+    site_id: str = Field(description="SharePoint site ID.")
+    list_id: str = Field(description="SharePoint list ID.")
+    item_id: str = Field(description="List item ID to delete.")
+
+
+class CreateConditionalAccessPolicyArgs(ConfirmableArgs):
+    """Confirmable input for creating a Conditional Access policy.
+
+    Accepts a Graph-shaped policy body so callers can express the full schema
+    without us having to recreate every nested option as flat fields.
+    """
+
+    display_name: str = Field(description="Policy display name.")
+    state: str = Field(
+        default="enabledForReportingButNotEnforced",
+        description="Policy state (enabled, disabled, enabledForReportingButNotEnforced).",
+    )
+    conditions: dict[str, Any] = Field(description="Graph conditions block.")
+    grant_controls: dict[str, Any] | None = Field(
+        default=None, description="Graph grantControls block."
+    )
+
+
+class DeleteConditionalAccessPolicyArgs(ConfirmableArgs):
+    """Confirmable input for deleting a Conditional Access policy (destructive)."""
+
+    policy_id: str = Field(description="Conditional Access policy ID to delete.")
+
+
+class RemoteLockArgs(ConfirmableArgs):
+    """Confirmable input for triggering a remote lock on a managed device."""
+
+    device_id: str = Field(description="Intune managed device ID.")
+
+
+class ResetPasscodeArgs(ConfirmableArgs):
+    """Confirmable input for resetting the passcode on a managed device."""
+
+    device_id: str = Field(description="Intune managed device ID.")
+
+
+class RestartManagedDeviceArgs(ConfirmableArgs):
+    """Confirmable input for triggering a reboot on a managed device."""
+
+    device_id: str = Field(description="Intune managed device ID.")
+
+
+class CancelBookingAppointmentArgs(ConfirmableArgs):
+    """Confirmable input for cancelling a Bookings appointment."""
+
+    business_id: str = Field(description="Bookings business ID.")
+    appointment_id: str = Field(description="Appointment ID to cancel.")
+    cancellation_message: str | None = Field(
+        default=None, description="Optional cancellation message to customer."
+    )
+
+
+class RemoveUserLicenseArgs(ConfirmableArgs):
+    """Confirmable input for removing licenses from a user."""
+
+    user_id: str = Field(description="User object ID or userPrincipalName.")
+    remove_skus: list[str] = Field(description="License SKU IDs to remove.")
+
+
+class RunHuntingQueryArgs(BaseModel):
+    """Input for running an advanced hunting (KQL) query.
+
+    Hunting queries are read-only by intent (they do not change tenant state),
+    so this is a read tool — but it's exposed via POST per Graph's contract.
+    """
+
+    query: str = Field(description="Advanced hunting (KQL) query string.")
+    timespan: str | None = Field(
+        default=None,
+        description="Optional ISO 8601 timespan (e.g. 'PT24H') to bound the query window.",
+    )
+
+
+class UpdateSecurityIncidentArgs(ConfirmableArgs):
+    """Confirmable input for updating a security incident (assign / classify / resolve)."""
+
+    incident_id: str = Field(description="Security incident ID.")
+    status: str | None = Field(
+        default=None, description="New status (e.g. 'active', 'resolved', 'redirected')."
+    )
+    classification: str | None = Field(
+        default=None,
+        description="Classification (e.g. 'truePositive', 'falsePositive', 'informationalExpectedActivity').",
+    )
+    assigned_to: str | None = Field(default=None, description="UPN or display name of assignee.")
+    determination: str | None = Field(default=None, description="Determination label, if any.")
+
+
+class CreateThreatAssessmentRequestArgs(ConfirmableArgs):
+    """Confirmable input for submitting a Defender threat assessment request.
+
+    Accepts a free-form Graph body so callers can submit email/URL/file/EmailFile
+    requests without us flattening the polymorphic schema.
+    """
+
+    request_type: str = Field(
+        description="Graph @odata.type discriminator (e.g. 'mailAssessmentRequest', 'urlAssessmentRequest', 'fileAssessmentRequest', 'emailFileAssessmentRequest')."
+    )
+    body: dict[str, Any] = Field(
+        description="Type-specific request payload (URL string, file hash, message ID, etc.)."
+    )
+
+
 class IdentityAccessDomain(GraphDomain):
     """Graph domain exposing user, group, app, and OAuth identity tools."""
 
@@ -1004,6 +1399,83 @@ class IdentityAccessDomain(GraphDomain):
                 safety="destructive",
                 tags=("oauth", "permission", "grant", "delete", "mutation"),
             ),
+            _tool(
+                "create_user",
+                "Create a new user in the directory.",
+                CreateUserArgs,
+                self._handlers.create_user,
+                read_only=False,
+                requires_confirmation=True,
+                domain=self.metadata.name,
+                safety="mutation",
+                tags=("user", "create", "provisioning", "mutation"),
+            ),
+            _tool(
+                "create_group",
+                "Create a new group.",
+                CreateGroupArgs,
+                self._handlers.create_group,
+                read_only=False,
+                requires_confirmation=True,
+                domain=self.metadata.name,
+                safety="mutation",
+                tags=("group", "create", "mutation"),
+            ),
+            _tool(
+                "update_group",
+                "Update a group's display name or description.",
+                UpdateGroupArgs,
+                self._handlers.update_group,
+                read_only=False,
+                requires_confirmation=True,
+                domain=self.metadata.name,
+                safety="mutation",
+                tags=("group", "update", "mutation"),
+            ),
+            _tool(
+                "delete_group",
+                "Delete a group.",
+                DeleteGroupArgs,
+                self._handlers.delete_group,
+                read_only=False,
+                requires_confirmation=True,
+                domain=self.metadata.name,
+                safety="destructive",
+                tags=("group", "delete", "destructive"),
+            ),
+            _tool(
+                "add_group_owner",
+                "Add an owner to a group.",
+                GroupOwnerArgs,
+                self._handlers.add_group_owner,
+                read_only=False,
+                requires_confirmation=True,
+                domain=self.metadata.name,
+                safety="mutation",
+                tags=("group", "owner", "add", "mutation"),
+            ),
+            _tool(
+                "remove_group_owner",
+                "Remove an owner from a group.",
+                GroupOwnerArgs,
+                self._handlers.remove_group_owner,
+                read_only=False,
+                requires_confirmation=True,
+                domain=self.metadata.name,
+                safety="mutation",
+                tags=("group", "owner", "remove", "mutation"),
+            ),
+            _tool(
+                "set_service_principal_enabled",
+                "Enable or disable a service principal (accountEnabled).",
+                SetServicePrincipalEnabledArgs,
+                self._handlers.set_service_principal_enabled,
+                read_only=False,
+                requires_confirmation=True,
+                domain=self.metadata.name,
+                safety="security_mutation",
+                tags=("service principal", "disable", "enable", "mutation"),
+            ),
         ]
 
 
@@ -1071,6 +1543,36 @@ class SecurityDomain(GraphDomain):
                 self._handlers.get_security_incident,
                 domain=self.metadata.name,
                 tags=("security", "incident", "defender", "investigation"),
+            ),
+            _tool(
+                "update_security_incident",
+                "Update a security incident (assign, classify, resolve).",
+                UpdateSecurityIncidentArgs,
+                self._handlers.update_security_incident,
+                read_only=False,
+                requires_confirmation=True,
+                domain=self.metadata.name,
+                safety="security_mutation",
+                tags=("security", "incidents", "update", "mutation"),
+            ),
+            _tool(
+                "run_hunting_query",
+                "Run an advanced hunting (KQL) query against the security data lake.",
+                RunHuntingQueryArgs,
+                self._handlers.run_hunting_query,
+                domain=self.metadata.name,
+                tags=("security", "hunting", "kql", "read"),
+            ),
+            _tool(
+                "create_threat_assessment_request",
+                "Submit a Defender threat assessment request (mail/url/file/emailFile).",
+                CreateThreatAssessmentRequestArgs,
+                self._handlers.create_threat_assessment_request,
+                read_only=False,
+                requires_confirmation=True,
+                domain=self.metadata.name,
+                safety="mutation",
+                tags=("security", "threat assessment", "submit", "mutation"),
             ),
         ]
 
@@ -1299,6 +1801,28 @@ class ConditionalAccessDomain(GraphDomain):
                 safety="security_mutation",
                 tags=("conditional access", "policy", "state", "mutation"),
             ),
+            _tool(
+                "create_conditional_access_policy",
+                "Create a new Conditional Access policy.",
+                CreateConditionalAccessPolicyArgs,
+                self._handlers.create_conditional_access_policy,
+                read_only=False,
+                requires_confirmation=True,
+                domain=self.metadata.name,
+                safety="security_mutation",
+                tags=("conditional access", "policy", "create", "mutation"),
+            ),
+            _tool(
+                "delete_conditional_access_policy",
+                "Delete a Conditional Access policy (destructive).",
+                DeleteConditionalAccessPolicyArgs,
+                self._handlers.delete_conditional_access_policy,
+                read_only=False,
+                requires_confirmation=True,
+                domain=self.metadata.name,
+                safety="destructive",
+                tags=("conditional access", "policy", "delete", "destructive"),
+            ),
         ]
 
 
@@ -1349,6 +1873,17 @@ class LicenseManagementDomain(GraphDomain):
                 domain=self.metadata.name,
                 safety="mutation",
                 tags=("licenses", "assign", "mutation"),
+            ),
+            _tool(
+                "remove_user_license",
+                "Remove licenses from a user.",
+                RemoveUserLicenseArgs,
+                self._handlers.remove_user_license,
+                read_only=False,
+                requires_confirmation=True,
+                domain=self.metadata.name,
+                safety="mutation",
+                tags=("licenses", "remove", "mutation"),
             ),
         ]
 
@@ -1411,6 +1946,28 @@ class ApplicationsDomain(GraphDomain):
                 safety="destructive",
                 tags=("application", "delete", "mutation"),
             ),
+            _tool(
+                "add_application_password",
+                "Add a client secret (password) to an application.",
+                AddApplicationPasswordArgs,
+                self._handlers.add_application_password,
+                read_only=False,
+                requires_confirmation=True,
+                domain=self.metadata.name,
+                safety="security_mutation",
+                tags=("application", "secret", "password", "mutation"),
+            ),
+            _tool(
+                "remove_application_password",
+                "Remove a client secret from an application.",
+                RemoveApplicationPasswordArgs,
+                self._handlers.remove_application_password,
+                read_only=False,
+                requires_confirmation=True,
+                domain=self.metadata.name,
+                safety="security_mutation",
+                tags=("application", "secret", "password", "remove", "mutation"),
+            ),
         ]
 
 
@@ -1468,6 +2025,72 @@ class MailDomain(GraphDomain):
                 domain=self.metadata.name,
                 safety="mutation",
                 tags=("mail", "send", "mutation"),
+            ),
+            _tool(
+                "reply_message",
+                "Reply to a mail message (optionally reply-all).",
+                ReplyMessageArgs,
+                self._handlers.reply_message,
+                read_only=False,
+                requires_confirmation=True,
+                domain=self.metadata.name,
+                safety="mutation",
+                tags=("mail", "reply", "mutation"),
+            ),
+            _tool(
+                "forward_message",
+                "Forward a mail message to one or more recipients.",
+                ForwardMessageArgs,
+                self._handlers.forward_message,
+                read_only=False,
+                requires_confirmation=True,
+                domain=self.metadata.name,
+                safety="mutation",
+                tags=("mail", "forward", "mutation"),
+            ),
+            _tool(
+                "move_message",
+                "Move a mail message to a different folder.",
+                MoveMessageArgs,
+                self._handlers.move_message,
+                read_only=False,
+                requires_confirmation=True,
+                domain=self.metadata.name,
+                safety="mutation",
+                tags=("mail", "move", "mutation"),
+            ),
+            _tool(
+                "update_message",
+                "Update a mail message (e.g. mark read/unread, set flag).",
+                UpdateMessageArgs,
+                self._handlers.update_message,
+                read_only=False,
+                requires_confirmation=True,
+                domain=self.metadata.name,
+                safety="mutation",
+                tags=("mail", "update", "mutation"),
+            ),
+            _tool(
+                "delete_message",
+                "Delete a mail message (destructive).",
+                MessageActionArgs,
+                self._handlers.delete_message,
+                read_only=False,
+                requires_confirmation=True,
+                domain=self.metadata.name,
+                safety="destructive",
+                tags=("mail", "delete", "destructive"),
+            ),
+            _tool(
+                "create_mail_folder",
+                "Create a new mail folder for a user.",
+                CreateMailFolderArgs,
+                self._handlers.create_mail_folder,
+                read_only=False,
+                requires_confirmation=True,
+                domain=self.metadata.name,
+                safety="mutation",
+                tags=("mail", "folder", "create", "mutation"),
             ),
         ]
 
@@ -1530,6 +2153,28 @@ class CalendarDomain(GraphDomain):
                 safety="mutation",
                 tags=("calendar", "event", "cancel", "mutation"),
             ),
+            _tool(
+                "update_event",
+                "Update a calendar event's subject or body.",
+                UpdateEventArgs,
+                self._handlers.update_event,
+                read_only=False,
+                requires_confirmation=True,
+                domain=self.metadata.name,
+                safety="mutation",
+                tags=("calendar", "event", "update", "mutation"),
+            ),
+            _tool(
+                "respond_to_event",
+                "Respond to a calendar event invite (accept / tentativelyAccept / decline).",
+                RespondToEventArgs,
+                self._handlers.respond_to_event,
+                read_only=False,
+                requires_confirmation=True,
+                domain=self.metadata.name,
+                safety="mutation",
+                tags=("calendar", "event", "respond", "mutation"),
+            ),
         ]
 
 
@@ -1589,6 +2234,50 @@ class TeamsDomain(GraphDomain):
                 safety="mutation",
                 tags=("teams", "channels", "message", "send", "mutation"),
             ),
+            _tool(
+                "create_team",
+                "Create a new team from a Teams template.",
+                CreateTeamArgs,
+                self._handlers.create_team,
+                read_only=False,
+                requires_confirmation=True,
+                domain=self.metadata.name,
+                safety="mutation",
+                tags=("teams", "team", "create", "mutation"),
+            ),
+            _tool(
+                "add_team_member",
+                "Add a member to a team.",
+                AddTeamMemberArgs,
+                self._handlers.add_team_member,
+                read_only=False,
+                requires_confirmation=True,
+                domain=self.metadata.name,
+                safety="mutation",
+                tags=("teams", "members", "add", "mutation"),
+            ),
+            _tool(
+                "create_channel",
+                "Create a channel in a team.",
+                CreateChannelArgs,
+                self._handlers.create_channel,
+                read_only=False,
+                requires_confirmation=True,
+                domain=self.metadata.name,
+                safety="mutation",
+                tags=("teams", "channels", "create", "mutation"),
+            ),
+            _tool(
+                "archive_team",
+                "Archive a team (read-only / no further activity).",
+                ArchiveTeamArgs,
+                self._handlers.archive_team,
+                read_only=False,
+                requires_confirmation=True,
+                domain=self.metadata.name,
+                safety="mutation",
+                tags=("teams", "team", "archive", "mutation"),
+            ),
         ]
 
 
@@ -1646,6 +2335,50 @@ class FilesDomain(GraphDomain):
                 domain=self.metadata.name,
                 safety="mutation",
                 tags=("files", "drive", "share", "link", "mutation"),
+            ),
+            _tool(
+                "upload_file",
+                "Upload a small text file to a drive (PUT content).",
+                UploadFileArgs,
+                self._handlers.upload_file,
+                read_only=False,
+                requires_confirmation=True,
+                domain=self.metadata.name,
+                safety="mutation",
+                tags=("files", "drive", "upload", "mutation"),
+            ),
+            _tool(
+                "create_folder",
+                "Create a folder in a drive.",
+                CreateFolderArgs,
+                self._handlers.create_folder,
+                read_only=False,
+                requires_confirmation=True,
+                domain=self.metadata.name,
+                safety="mutation",
+                tags=("files", "drive", "folder", "create", "mutation"),
+            ),
+            _tool(
+                "delete_drive_item",
+                "Delete a drive item (destructive).",
+                DeleteDriveItemArgs,
+                self._handlers.delete_drive_item,
+                read_only=False,
+                requires_confirmation=True,
+                domain=self.metadata.name,
+                safety="destructive",
+                tags=("files", "drive", "delete", "destructive"),
+            ),
+            _tool(
+                "copy_drive_item",
+                "Copy a drive item to a new name or parent.",
+                CopyDriveItemArgs,
+                self._handlers.copy_drive_item,
+                read_only=False,
+                requires_confirmation=True,
+                domain=self.metadata.name,
+                safety="mutation",
+                tags=("files", "drive", "copy", "mutation"),
             ),
         ]
 
@@ -1747,6 +2480,39 @@ class DeviceManagementDomain(GraphDomain):
                 safety="mutation",
                 tags=("intune", "managed device", "sync", "mutation"),
             ),
+            _tool(
+                "remote_lock_device",
+                "Trigger a remote lock on a managed device.",
+                RemoteLockArgs,
+                self._handlers.remote_lock_device,
+                read_only=False,
+                requires_confirmation=True,
+                domain=self.metadata.name,
+                safety="mutation",
+                tags=("intune", "managed device", "lock", "mutation"),
+            ),
+            _tool(
+                "reset_device_passcode",
+                "Reset the passcode on a managed device.",
+                ResetPasscodeArgs,
+                self._handlers.reset_device_passcode,
+                read_only=False,
+                requires_confirmation=True,
+                domain=self.metadata.name,
+                safety="security_mutation",
+                tags=("intune", "managed device", "passcode", "mutation"),
+            ),
+            _tool(
+                "restart_managed_device",
+                "Restart a managed device.",
+                RestartManagedDeviceArgs,
+                self._handlers.restart_managed_device,
+                read_only=False,
+                requires_confirmation=True,
+                domain=self.metadata.name,
+                safety="mutation",
+                tags=("intune", "managed device", "restart", "mutation"),
+            ),
         ]
 
 
@@ -1797,6 +2563,17 @@ class ChatsDomain(GraphDomain):
                 domain=self.metadata.name,
                 safety="mutation",
                 tags=("chats", "teams", "message", "send", "mutation"),
+            ),
+            _tool(
+                "create_chat",
+                "Create a Teams chat (oneOnOne or group).",
+                CreateChatArgs,
+                self._handlers.create_chat,
+                read_only=False,
+                requires_confirmation=True,
+                domain=self.metadata.name,
+                safety="mutation",
+                tags=("chats", "teams", "create", "mutation"),
             ),
         ]
 
@@ -1863,6 +2640,28 @@ class SharePointSitesDomain(GraphDomain):
                 domain=self.metadata.name,
                 safety="mutation",
                 tags=("sharepoint", "list", "item", "create", "mutation"),
+            ),
+            _tool(
+                "update_list_item",
+                "Update fields on a SharePoint list item.",
+                UpdateListItemArgs,
+                self._handlers.update_list_item,
+                read_only=False,
+                requires_confirmation=True,
+                domain=self.metadata.name,
+                safety="mutation",
+                tags=("sharepoint", "list", "item", "update", "mutation"),
+            ),
+            _tool(
+                "delete_list_item",
+                "Delete a SharePoint list item (destructive).",
+                DeleteListItemArgs,
+                self._handlers.delete_list_item,
+                read_only=False,
+                requires_confirmation=True,
+                domain=self.metadata.name,
+                safety="destructive",
+                tags=("sharepoint", "list", "item", "delete", "destructive"),
             ),
         ]
 
@@ -1958,6 +2757,28 @@ class ContactsDomain(GraphDomain):
                 safety="mutation",
                 tags=("contacts", "contact", "create", "mutation"),
             ),
+            _tool(
+                "update_contact",
+                "Update a contact's name or email.",
+                UpdateContactArgs,
+                self._handlers.update_contact,
+                read_only=False,
+                requires_confirmation=True,
+                domain=self.metadata.name,
+                safety="mutation",
+                tags=("contacts", "contact", "update", "mutation"),
+            ),
+            _tool(
+                "delete_contact",
+                "Delete a contact (destructive).",
+                DeleteContactArgs,
+                self._handlers.delete_contact,
+                read_only=False,
+                requires_confirmation=True,
+                domain=self.metadata.name,
+                safety="destructive",
+                tags=("contacts", "contact", "delete", "destructive"),
+            ),
         ]
 
 
@@ -2017,6 +2838,28 @@ class PlannerDomain(GraphDomain):
                 safety="mutation",
                 tags=("planner", "task", "create", "mutation"),
             ),
+            _tool(
+                "update_planner_task",
+                "Update a Planner task (e.g. mark complete via percentComplete=100).",
+                UpdatePlannerTaskArgs,
+                self._handlers.update_planner_task,
+                read_only=False,
+                requires_confirmation=True,
+                domain=self.metadata.name,
+                safety="mutation",
+                tags=("planner", "task", "update", "mutation"),
+            ),
+            _tool(
+                "delete_planner_task",
+                "Delete a Planner task (destructive).",
+                DeletePlannerTaskArgs,
+                self._handlers.delete_planner_task,
+                read_only=False,
+                requires_confirmation=True,
+                domain=self.metadata.name,
+                safety="destructive",
+                tags=("planner", "task", "delete", "destructive"),
+            ),
         ]
 
 
@@ -2066,6 +2909,28 @@ class TodoDomain(GraphDomain):
                 domain=self.metadata.name,
                 safety="mutation",
                 tags=("todo", "task", "create", "mutation"),
+            ),
+            _tool(
+                "update_todo_task",
+                "Update a To Do task (e.g. mark completed).",
+                UpdateTodoTaskArgs,
+                self._handlers.update_todo_task,
+                read_only=False,
+                requires_confirmation=True,
+                domain=self.metadata.name,
+                safety="mutation",
+                tags=("todo", "task", "update", "mutation"),
+            ),
+            _tool(
+                "delete_todo_task",
+                "Delete a To Do task (destructive).",
+                DeleteTodoTaskArgs,
+                self._handlers.delete_todo_task,
+                read_only=False,
+                requires_confirmation=True,
+                domain=self.metadata.name,
+                safety="destructive",
+                tags=("todo", "task", "delete", "destructive"),
             ),
         ]
 
@@ -2508,6 +3373,17 @@ class BookingsDomain(GraphDomain):
                 domain=self.metadata.name,
                 safety="mutation",
                 tags=("bookings", "appointment", "create", "mutation"),
+            ),
+            _tool(
+                "cancel_booking_appointment",
+                "Cancel a Bookings appointment.",
+                CancelBookingAppointmentArgs,
+                self._handlers.cancel_booking_appointment,
+                read_only=False,
+                requires_confirmation=True,
+                domain=self.metadata.name,
+                safety="mutation",
+                tags=("bookings", "appointment", "cancel", "mutation"),
             ),
         ]
 
@@ -4029,6 +4905,405 @@ class GraphToolFactory:
     async def delete_subscription(self, args: DeleteSubscriptionArgs) -> Any:
         return await self._client.request(
             "DELETE", f"/subscriptions/{args.subscription_id}"
+        )
+
+    # --- Tier-4 write-completeness handlers --------------------------------
+
+    async def create_user(self, args: CreateUserArgs) -> Any:
+        body = {
+            "userPrincipalName": args.user_principal_name,
+            "displayName": args.display_name,
+            "mailNickname": args.mail_nickname,
+            "accountEnabled": args.account_enabled,
+            "passwordProfile": {
+                "password": args.password,
+                "forceChangePasswordNextSignIn": True,
+            },
+        }
+        return await self._client.request("POST", "/users", json_data=body)
+
+    async def create_group(self, args: CreateGroupArgs) -> Any:
+        body: dict[str, Any] = {
+            "displayName": args.display_name,
+            "mailNickname": args.mail_nickname,
+            "mailEnabled": args.mail_enabled,
+            "securityEnabled": args.security_enabled,
+        }
+        if args.description:
+            body["description"] = args.description
+        return await self._client.request("POST", "/groups", json_data=body)
+
+    async def update_group(self, args: UpdateGroupArgs) -> Any:
+        body: dict[str, Any] = {}
+        if args.display_name is not None:
+            body["displayName"] = args.display_name
+        if args.description is not None:
+            body["description"] = args.description
+        return await self._client.request(
+            "PATCH", f"/groups/{args.group_id}", json_data=body
+        )
+
+    async def delete_group(self, args: DeleteGroupArgs) -> Any:
+        return await self._client.request("DELETE", f"/groups/{args.group_id}")
+
+    async def add_group_owner(self, args: GroupOwnerArgs) -> Any:
+        body = {
+            "@odata.id": (
+                f"https://graph.microsoft.com/v1.0/directoryObjects/{args.owner_id}"
+            )
+        }
+        return await self._client.request(
+            "POST", f"/groups/{args.group_id}/owners/$ref", json_data=body
+        )
+
+    async def remove_group_owner(self, args: GroupOwnerArgs) -> Any:
+        return await self._client.request(
+            "DELETE", f"/groups/{args.group_id}/owners/{args.owner_id}/$ref"
+        )
+
+    async def set_service_principal_enabled(
+        self, args: SetServicePrincipalEnabledArgs
+    ) -> Any:
+        return await self._client.request(
+            "PATCH",
+            f"/servicePrincipals/{args.service_principal_id}",
+            json_data={"accountEnabled": args.account_enabled},
+        )
+
+    async def update_security_incident(self, args: UpdateSecurityIncidentArgs) -> Any:
+        body: dict[str, Any] = {}
+        if args.status is not None:
+            body["status"] = args.status
+        if args.classification is not None:
+            body["classification"] = args.classification
+        if args.assigned_to is not None:
+            body["assignedTo"] = args.assigned_to
+        if args.determination is not None:
+            body["determination"] = args.determination
+        return await self._client.request(
+            "PATCH", f"/security/incidents/{args.incident_id}", json_data=body
+        )
+
+    async def run_hunting_query(self, args: RunHuntingQueryArgs) -> Any:
+        body: dict[str, Any] = {"Query": args.query}
+        if args.timespan:
+            body["Timespan"] = args.timespan
+        return await self._client.request("POST", "/security/runHuntingQuery", json_data=body)
+
+    async def create_threat_assessment_request(
+        self, args: CreateThreatAssessmentRequestArgs
+    ) -> Any:
+        body = dict(args.body)
+        body.setdefault("@odata.type", f"#microsoft.graph.{args.request_type}")
+        return await self._client.request(
+            "POST", "/informationProtection/threatAssessmentRequests", json_data=body
+        )
+
+    async def create_conditional_access_policy(
+        self, args: CreateConditionalAccessPolicyArgs
+    ) -> Any:
+        body: dict[str, Any] = {
+            "displayName": args.display_name,
+            "state": args.state,
+            "conditions": args.conditions,
+        }
+        if args.grant_controls is not None:
+            body["grantControls"] = args.grant_controls
+        return await self._client.request(
+            "POST", "/identity/conditionalAccess/policies", json_data=body
+        )
+
+    async def delete_conditional_access_policy(
+        self, args: DeleteConditionalAccessPolicyArgs
+    ) -> Any:
+        return await self._client.request(
+            "DELETE", f"/identity/conditionalAccess/policies/{args.policy_id}"
+        )
+
+    async def remove_user_license(self, args: RemoveUserLicenseArgs) -> Any:
+        body = {"addLicenses": [], "removeLicenses": args.remove_skus}
+        return await self._client.request(
+            "POST", f"/users/{args.user_id}/assignLicense", json_data=body
+        )
+
+    async def add_application_password(self, args: AddApplicationPasswordArgs) -> Any:
+        body = {"passwordCredential": {"displayName": args.display_name}}
+        return await self._client.request(
+            "POST", f"/applications/{args.application_id}/addPassword", json_data=body
+        )
+
+    async def remove_application_password(
+        self, args: RemoveApplicationPasswordArgs
+    ) -> Any:
+        return await self._client.request(
+            "POST",
+            f"/applications/{args.application_id}/removePassword",
+            json_data={"keyId": args.key_id},
+        )
+
+    async def reply_message(self, args: ReplyMessageArgs) -> Any:
+        action = "replyAll" if args.reply_all else "reply"
+        return await self._client.request(
+            "POST",
+            f"/users/{args.user_id}/messages/{args.message_id}/{action}",
+            json_data={"comment": args.comment},
+        )
+
+    async def forward_message(self, args: ForwardMessageArgs) -> Any:
+        body: dict[str, Any] = {
+            "toRecipients": [
+                {"emailAddress": {"address": addr}} for addr in args.to_recipients
+            ]
+        }
+        if args.comment:
+            body["comment"] = args.comment
+        return await self._client.request(
+            "POST",
+            f"/users/{args.user_id}/messages/{args.message_id}/forward",
+            json_data=body,
+        )
+
+    async def move_message(self, args: MoveMessageArgs) -> Any:
+        return await self._client.request(
+            "POST",
+            f"/users/{args.user_id}/messages/{args.message_id}/move",
+            json_data={"destinationId": args.destination_id},
+        )
+
+    async def update_message(self, args: UpdateMessageArgs) -> Any:
+        body: dict[str, Any] = {}
+        if args.is_read is not None:
+            body["isRead"] = args.is_read
+        if args.flag_status is not None:
+            body["flag"] = {"flagStatus": args.flag_status}
+        return await self._client.request(
+            "PATCH",
+            f"/users/{args.user_id}/messages/{args.message_id}",
+            json_data=body,
+        )
+
+    async def delete_message(self, args: MessageActionArgs) -> Any:
+        return await self._client.request(
+            "DELETE", f"/users/{args.user_id}/messages/{args.message_id}"
+        )
+
+    async def create_mail_folder(self, args: CreateMailFolderArgs) -> Any:
+        return await self._client.request(
+            "POST",
+            f"/users/{args.user_id}/mailFolders",
+            json_data={"displayName": args.display_name},
+        )
+
+    async def update_event(self, args: UpdateEventArgs) -> Any:
+        body: dict[str, Any] = {}
+        if args.subject is not None:
+            body["subject"] = args.subject
+        if args.body_content is not None:
+            body["body"] = {"contentType": "text", "content": args.body_content}
+        return await self._client.request(
+            "PATCH",
+            f"/users/{args.user_id}/events/{args.event_id}",
+            json_data=body,
+        )
+
+    async def respond_to_event(self, args: RespondToEventArgs) -> Any:
+        body: dict[str, Any] = {"sendResponse": args.send_response}
+        if args.comment:
+            body["comment"] = args.comment
+        return await self._client.request(
+            "POST",
+            f"/users/{args.user_id}/events/{args.event_id}/{args.response}",
+            json_data=body,
+        )
+
+    async def create_team(self, args: CreateTeamArgs) -> Any:
+        body: dict[str, Any] = {
+            "template@odata.bind": args.template,
+            "displayName": args.display_name,
+        }
+        if args.description:
+            body["description"] = args.description
+        return await self._client.request("POST", "/teams", json_data=body)
+
+    async def add_team_member(self, args: AddTeamMemberArgs) -> Any:
+        body = {
+            "@odata.type": "#microsoft.graph.aadUserConversationMember",
+            "user@odata.bind": (
+                f"https://graph.microsoft.com/v1.0/users('{args.user_id}')"
+            ),
+            "roles": args.roles,
+        }
+        return await self._client.request(
+            "POST", f"/teams/{args.team_id}/members", json_data=body
+        )
+
+    async def create_channel(self, args: CreateChannelArgs) -> Any:
+        body = {
+            "displayName": args.display_name,
+            "membershipType": args.membership_type,
+        }
+        return await self._client.request(
+            "POST", f"/teams/{args.team_id}/channels", json_data=body
+        )
+
+    async def archive_team(self, args: ArchiveTeamArgs) -> Any:
+        return await self._client.request("POST", f"/teams/{args.team_id}/archive")
+
+    async def create_chat(self, args: CreateChatArgs) -> Any:
+        members = [
+            {
+                "@odata.type": "#microsoft.graph.aadUserConversationMember",
+                "roles": ["owner"],
+                "user@odata.bind": (
+                    f"https://graph.microsoft.com/v1.0/users('{mid}')"
+                ),
+            }
+            for mid in args.member_ids
+        ]
+        body: dict[str, Any] = {"chatType": args.chat_type, "members": members}
+        if args.topic:
+            body["topic"] = args.topic
+        return await self._client.request("POST", "/chats", json_data=body)
+
+    async def upload_file(self, args: UploadFileArgs) -> Any:
+        path = (
+            f"/drives/{args.drive_id}/root:/{args.file_name}:/content"
+            if args.parent_path == "root"
+            else f"/drives/{args.drive_id}/root:/{args.parent_path}/{args.file_name}:/content"
+        )
+        return await self._client.request(
+            "PUT", path, json_data={"_content": args.content}
+        )
+
+    async def create_folder(self, args: CreateFolderArgs) -> Any:
+        body = {
+            "name": args.folder_name,
+            "folder": {},
+            "@microsoft.graph.conflictBehavior": "fail",
+        }
+        return await self._client.request(
+            "POST",
+            f"/drives/{args.drive_id}/items/{args.parent_id}/children",
+            json_data=body,
+        )
+
+    async def delete_drive_item(self, args: DeleteDriveItemArgs) -> Any:
+        return await self._client.request(
+            "DELETE", f"/drives/{args.drive_id}/items/{args.item_id}"
+        )
+
+    async def copy_drive_item(self, args: CopyDriveItemArgs) -> Any:
+        body: dict[str, Any] = {}
+        if args.new_name:
+            body["name"] = args.new_name
+        if args.target_parent_id:
+            body["parentReference"] = {"id": args.target_parent_id}
+        return await self._client.request(
+            "POST",
+            f"/drives/{args.drive_id}/items/{args.item_id}/copy",
+            json_data=body,
+        )
+
+    async def remote_lock_device(self, args: RemoteLockArgs) -> Any:
+        return await self._client.request(
+            "POST",
+            f"/deviceManagement/managedDevices/{args.device_id}/remoteLock",
+        )
+
+    async def reset_device_passcode(self, args: ResetPasscodeArgs) -> Any:
+        return await self._client.request(
+            "POST",
+            f"/deviceManagement/managedDevices/{args.device_id}/resetPasscode",
+        )
+
+    async def restart_managed_device(self, args: RestartManagedDeviceArgs) -> Any:
+        return await self._client.request(
+            "POST",
+            f"/deviceManagement/managedDevices/{args.device_id}/rebootNow",
+        )
+
+    async def update_list_item(self, args: UpdateListItemArgs) -> Any:
+        return await self._client.request(
+            "PATCH",
+            f"/sites/{args.site_id}/lists/{args.list_id}/items/{args.item_id}/fields",
+            json_data=args.fields,
+        )
+
+    async def delete_list_item(self, args: DeleteListItemArgs) -> Any:
+        return await self._client.request(
+            "DELETE",
+            f"/sites/{args.site_id}/lists/{args.list_id}/items/{args.item_id}",
+        )
+
+    async def update_contact(self, args: UpdateContactArgs) -> Any:
+        body: dict[str, Any] = {}
+        if args.given_name is not None:
+            body["givenName"] = args.given_name
+        if args.surname is not None:
+            body["surname"] = args.surname
+        if args.email is not None:
+            body["emailAddresses"] = [{"address": args.email}]
+        return await self._client.request(
+            "PATCH",
+            f"/users/{args.user_id}/contacts/{args.contact_id}",
+            json_data=body,
+        )
+
+    async def delete_contact(self, args: DeleteContactArgs) -> Any:
+        return await self._client.request(
+            "DELETE", f"/users/{args.user_id}/contacts/{args.contact_id}"
+        )
+
+    async def update_planner_task(self, args: UpdatePlannerTaskArgs) -> Any:
+        body: dict[str, Any] = {}
+        if args.title is not None:
+            body["title"] = args.title
+        if args.percent_complete is not None:
+            body["percentComplete"] = args.percent_complete
+        return await self._client.request(
+            "PATCH", f"/planner/tasks/{args.task_id}", json_data=body
+        )
+
+    async def delete_planner_task(self, args: DeletePlannerTaskArgs) -> Any:
+        return await self._client.request("DELETE", f"/planner/tasks/{args.task_id}")
+
+    async def update_todo_task(self, args: UpdateTodoTaskArgs) -> Any:
+        body: dict[str, Any] = {}
+        if args.title is not None:
+            body["title"] = args.title
+        if args.status is not None:
+            body["status"] = args.status
+        return await self._client.request(
+            "PATCH",
+            (
+                f"/users/{args.user_id}/todo/lists/{args.list_id}"
+                f"/tasks/{args.task_id}"
+            ),
+            json_data=body,
+        )
+
+    async def delete_todo_task(self, args: DeleteTodoTaskArgs) -> Any:
+        return await self._client.request(
+            "DELETE",
+            (
+                f"/users/{args.user_id}/todo/lists/{args.list_id}"
+                f"/tasks/{args.task_id}"
+            ),
+        )
+
+    async def cancel_booking_appointment(
+        self, args: CancelBookingAppointmentArgs
+    ) -> Any:
+        body: dict[str, Any] = {}
+        if args.cancellation_message:
+            body["cancellationMessage"] = args.cancellation_message
+        return await self._client.request(
+            "POST",
+            (
+                f"/solutions/bookingBusinesses/{args.business_id}"
+                f"/appointments/{args.appointment_id}/cancel"
+            ),
+            json_data=body,
         )
 
     async def graph_operation(self, args: GenericGraphOperationArgs) -> Any:

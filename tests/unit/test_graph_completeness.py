@@ -67,6 +67,9 @@ def test_security_domain_registers_new_tools() -> None:
         "update_security_alert",
         "list_security_incidents",
         "get_security_incident",
+        "update_security_incident",
+        "run_hunting_query",
+        "create_threat_assessment_request",
     } == names
     update = registry.get("update_security_alert")
     assert update.read_only is False

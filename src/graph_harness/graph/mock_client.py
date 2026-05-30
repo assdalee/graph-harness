@@ -672,7 +672,7 @@ class MockGraphClient:
             return {"value": self._filter_oauth_grants(params)}
         if method == "DELETE" and endpoint.startswith("/oauth2PermissionGrants/"):
             return {"success": True, "message": f"Mock DELETE {endpoint} completed."}
-        if method in {"POST", "PATCH", "DELETE"}:
+        if method in {"POST", "PATCH", "PUT", "DELETE"}:
             return {"success": True, "message": f"Mock {method} {endpoint} completed."}
         return {
             "error": {

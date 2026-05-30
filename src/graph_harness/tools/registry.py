@@ -114,11 +114,22 @@ class ToolRegistry:
         if len(domain_tools) <= max_tools:
             return domain_tools
 
+        # Resolver tools (resolve_user / resolve_group) exist to be chained before
+        # other operations — "resolve the name, then act on it" — so they must
+        # survive truncation whenever their domain is in scope, even when the query
+        # names only the entity (e.g. "Add Sarah to the Finance group").
+        resolver_tools = [tool for tool in domain_tools if tool.name.startswith("resolve_")]
+
+        def _with_resolvers(tools: list[ToolDefinition]) -> list[ToolDefinition]:
+            present = {tool.name for tool in tools}
+            prefix = [tool for tool in resolver_tools if tool.name not in present]
+            return (prefix + tools)[:max_tools]
+
         ranked = self.search_tools(query, max_tools=max_tools)
         domain_ranked = [tool for tool in ranked if tool.domain in selected_domains]
         if len(domain_ranked) >= min(3, max_tools):
-            return domain_ranked[:max_tools]
-        return domain_tools[:max_tools]
+            return _with_resolvers(domain_ranked)
+        return _with_resolvers(domain_tools)
 
     def _score_domain(self, domain: DomainMetadata, tokens: set[str]) -> int:
         """Score a domain by how many query tokens appear in its descriptive text."""
